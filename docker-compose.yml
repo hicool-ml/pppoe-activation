@@ -1,0 +1,82 @@
+# PPPOE 激活系统 Docker Compose 配置
+# 版本: 2.0.0
+# 更新日期: 2025-12-19
+
+version: '3.8'
+
+services:
+  # 初始化配置服务（首次启动时使用）
+  init-config:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: pppoe-init
+    hostname: pppoe-init
+    ports:
+      - "9999:9999"
+    volumes:
+      # 挂载配置文件，以便修改
+      - ${CONFIG_PATH:-./config.py}:/opt/pppoe-activation/config.py
+      - ${ENV_PATH:-./.env}:/opt/pppoe-activation/.env
+    command: python3 init_config.py
+    networks:
+      - pppoe-network
+    profiles:
+      - init
+
+  # 主应用服务
+  pppoe-activation:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: pppoe-activation
+    hostname: pppoe-activation
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-80}:80"
+      - "${ADMIN_PORT:-8081}:8081"
+    environment:
+      - TZ=${TZ:-Asia/Shanghai}
+      - APP_PORT=${APP_PORT:-80}
+      - ADMIN_PORT=${ADMIN_PORT:-80}
+      - NETWORK_INTERFACES=${NETWORK_INTERFACES:-eth0 eth1 eth2 eth3}
+    volumes:
+      # 数据持久化 - 数据库
+      - ${DATA_PATH:-./data}:/opt/pppoe-activation/data
+
+      # 数据持久化 - 日志
+      - ${LOGS_PATH:-./logs}:/opt/pppoe-activation/logs
+
+      # 数据持久化 - 数据库文件（重要！）
+      - ${DB_PATH:-./database.db}:/opt/pppoe-activation/database.db
+
+      # 数据持久化 - 实例目录（包含数据库）
+      - ${INSTANCE_PATH:-./instance}:/opt/pppoe-activation/instance
+
+      # 配置文件（可选，如果需要从宿主机修改配置）
+      # - ${CONFIG_PATH:-./config.py}:/opt/pppoe-activation/config.py:ro
+    networks:
+      - pppoe-network
+    cap_add:
+      - NET_ADMIN
+      - SYS_ADMIN
+    devices:
+      - /dev/net/tun
+    security_opt:
+      - seccomp:unconfined
+    privileged: true
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    depends_on:
+      - init-config
+
+networks:
+  pppoe-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

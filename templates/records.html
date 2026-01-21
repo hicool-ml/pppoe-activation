@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <title>拨号记录</title>
+</head>
+<body>
+<h2>拨号记录</h2>
+<table border="1" cellpadding="5">
+    <tr>
+        <th>姓名</th><th>账号</th><th>ISP</th><th>成功</th><th>错误代码</th><th>激活时间</th><th>MAC</th><th>IP</th>
+    </tr>
+    {% for r in data %}
+    <tr>
+        <td>{{ r.name }}</td>
+        <td>{{ r.username }}</td>
+        <td>{{ r.isp }}</td>
+        <td>{{ '是' if r.success else '否' }}</td>
+        <td>{{ r.error_code }}</td>
+        <td>{{ r.activated_at }}</td>
+        <td>{{ r.mac }}</td>
+        <td>{{ r.ip }}</td>
+    </tr>
+    {% endfor %}
+</table>
+
+<div>
+    {% if page > 1 %}
+        <a href="{{ url_for('records', page=page-1, per_page=per_page) }}">上一页</a>
+    {% endif %}
+    第 {{ page }} 页
+    {% if page*per_page < total %}
+        <a href="{{ url_for('records', page=page+1, per_page=per_page) }}">下一页</a>
+    {% endif %}
+</div>
+
+<a href="{{ url_for('dashboard') }}">返回仪表盘</a>
+</body>
+</html>

@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>配置成功 - PPPOE 激活系统</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Microsoft YaHei', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            max-width: 600px;
+            width: 100%;
+            padding: 40px;
+            text-align: center;
+        }
+
+        .success-icon {
+            font-size: 80px;
+            color: #28a745;
+            margin-bottom: 20px;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 16px;
+        }
+
+        .config-info {
+            background: #f8f9fa;
+            border-radius: 5px;
+            padding: 20px;
+            margin-bottom: 30px;
+            text-align: left;
+        }
+
+        .config-item {
+            margin-bottom: 15px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #dee2e6;
+        }
+
+        .config-item:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+            padding-bottom: 0;
+        }
+
+        .config-label {
+            font-weight: bold;
+            color: #495057;
+            margin-bottom: 5px;
+        }
+
+        .config-value {
+            color: #212529;
+            font-size: 14px;
+        }
+
+        .next-steps {
+            background: #fff3cd;
+            border: 1px solid #ffc107;
+            border-radius: 5px;
+            padding: 20px;
+            margin-bottom: 30px;
+            text-align: left;
+        }
+
+        .next-steps h3 {
+            color: #856404;
+            margin-bottom: 15px;
+            font-size: 18px;
+        }
+
+        .step {
+            margin-bottom: 10px;
+            padding-left: 20px;
+            position: relative;
+        }
+
+        .step:before {
+            content: "▸";
+            position: absolute;
+            left: 0;
+            color: #856404;
+            font-weight: bold;
+        }
+
+        .code {
+            background: #28a745;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+        }
+
+        .button {
+            display: inline-block;
+            padding: 12px 30px;
+            background-color: #667eea;
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+            font-weight: bold;
+            transition: all 0.3s;
+        }
+
+        .button:hover {
+            background-color: #5568d3;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="success-icon">✓</div>
+        <h1>配置成功！</h1>
+        <p class="subtitle">系统配置已完成，请按照以下步骤启动服务</p>
+
+        <div class="config-info">
+            <div class="config-item">
+                <div class="config-label">📡 网卡配置</div>
+                <div class="config-value">
+                    {% for iface in config.interfaces %}
+                    <span class="code">{{ iface }}</span>{% if not loop.last %}, {% endif %}
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div class="config-item">
+                <div class="config-label">🔌 端口配置</div>
+                <div class="config-value">
+                    应用端口：<span class="code">{{ config.app_port }}</span> |
+                    管理端口：<span class="code">{{ config.admin_port }}</span>
+                </div>
+            </div>
+
+            <div class="config-item">
+                <div class="config-label">💾 数据库路径</div>
+                <div class="config-value"><span class="code">{{ config.db_path }}</span></div>
+            </div>
+
+            <div class="config-item">
+                <div class="config-label">📁 实例目录</div>
+                <div class="config-value"><span class="code">{{ config.instance_path }}</span></div>
+            </div>
+
+            <div class="config-item">
+                <div class="config-label">📋 日志目录</div>
+                <div class="config-value"><span class="code">{{ config.logs_path }}</span></div>
+            </div>
+
+            <div class="config-item">
+                <div class="config-label">🌍 时区</div>
+                <div class="config-value"><span class="code">{{ config.tz }}</span></div>
+            </div>
+        </div>
+
+        <div class="next-steps">
+            <h3>📝 下一步操作</h3>
+            <div class="step">✅ 配置已保存，主应用容器已自动重启</div>
+            <div class="step">请访问以下地址：</div>
+            <div style="text-align: center; margin: 15px 0;">
+                <div>
+                    用户激活页面：
+                    <a href="http://{{ request.host.split(':')[0] }}:{{ config.app_port }}/" class="button" target="_blank">
+                        http://{{ request.host.split(':')[0] }}:{{ config.app_port }}/
+                    </a>
+                </div>
+                <div style="margin-top: 10px;">
+                    管理后台页面：
+                    <a href="http://{{ request.host.split(':')[0] }}:{{ config.admin_port }}/dashboard" class="button" target="_blank">
+                        http://{{ request.host.split(':')[0] }}:{{ config.admin_port }}/dashboard
+                    </a>
+                </div>
+            </div>
+            <div class="step">默认管理员账号：admin / admin123</div>
+            <div class="step">请及时修改默认密码！</div>
+        </div>
+
+        <p style="color: #666; font-size: 14px;">
+            配置文件已保存到：<span class="code">/opt/pppoe-activation/config.py</span> 和
+            <span class="code">/opt/pppoe-activation/.env</span>
+        </p>
+    </div>
+</body>
+</html>

@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>仪表盘 - PPPoE 激活系统</title>
+    <link href="/static/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { padding-top: 60px; }
+        .stat-card {
+            transition: transform 0.2s;
+        }
+        .stat-card:hover {
+            transform: translateY(-5px);
+        }
+    </style>
+</head>
+<body>
+<nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+    <div class="container">
+        <a class="navbar-brand" href="/admin">🔐 管理后台</a>
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="navbarNav">
+            <ul class="navbar-nav me-auto">
+                <li class="nav-item">
+                    <a class="nav-link active" href="/admin">仪表盘</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="/admin/logs">日志记录</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="/admin/config">系统配置</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="/admin_list">管理员管理</a>
+                </li>
+            </ul>
+            <ul class="navbar-nav">
+                <li class="nav-item">
+                    <a class="nav-link" href="/admin/logout">退出登录</a>
+                </li>
+            </ul>
+        </div>
+    </div>
+</nav>
+
+<div class="container mt-4">
+    <h2 class="mb-4">📊 系统概览</h2>
+
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card stat-card bg-primary text-white mb-3">
+                <div class="card-body">
+                    <h5 class="card-title">总激活次数</h5>
+                    <h2 class="display-4">{{ total }}</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card stat-card bg-success text-white mb-3">
+                <div class="card-body">
+                    <h5 class="card-title">成功次数</h5>
+                    <h2 class="display-4">{{ success }}</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card stat-card bg-danger text-white mb-3">
+                <div class="card-body">
+                    <h5 class="card-title">失败次数</h5>
+                    <h2 class="display-4">{{ failure }}</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card stat-card bg-info text-white mb-3">
+                <div class="card-body">
+                    <h5 class="card-title">成功率</h5>
+                    <h2 class="display-4">{{ success_rate }}</h2>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-header bg-dark text-white">
+            <h5 class="mb-0">📈 按运营商统计</h5>
+        </div>
+        <div class="card-body">
+            <table class="table table-striped">
+                <thead>
+                    <tr>
+                        <th>运营商</th>
+                        <th>成功次数</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for isp, count in stats.items() %}
+                    <tr>
+                        <td>
+                            <span class="badge" style="background-color: {{ isp_colors.get(isp, '#6c757d') }}">
+                                {{ isp }}
+                            </span>
+                        </td>
+                        <td>{{ count }}</td>
+                    </tr>
+                    {% endfor %}
+                    {% if not stats %}
+                    <tr>
+                        <td colspan="2" class="text-center">暂无数据</td>
+                    </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script src="/static/js/jquery.min.js"></script>
+</body>
+</html>
