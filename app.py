@@ -279,10 +279,43 @@ def activate():
 
     # === 锁外执行拨号（避免长时间持有锁）===
 
-    # 自动添加@cdu后缀（如果用户名中没有@cdu）
-    if '@cdu' not in username:
-        username = f"{username}@cdu"
-        logger.info(f"用户名已添加@cdu后缀: {username}")
+    # 根据ISP类型添加后缀
+    # 校园网：纯数字学号，添加@cdu后缀
+    # 移动：纯数字学号或scxy开头，添加@cmccgx后缀
+    # 电信：纯数字学号，添加@96301后缀
+    # 联通：纯数字学号，添加@10010后缀
+    # 修改过密码的移动用户：scxy开头，添加@cmccgx后缀
+    if '@' not in username:
+        # 检查是否为纯数字（校园网学号）
+        if username.isdigit():
+            # 根据ISP类型添加后缀
+            if isp == 'cmccgx':
+                # 移动用户
+                username = f"{username}@cmccgx"
+                logger.info(f"移动用户，添加@cmccgx后缀: {username}")
+            elif isp == '96301':
+                # 电信用户
+                username = f"{username}@96301"
+                logger.info(f"电信用户，添加@96301后缀: {username}")
+            elif isp == '10010':
+                # 联通用户
+                username = f"{username}@10010"
+                logger.info(f"联通用户，添加@10010后缀: {username}")
+            else:
+                # 校园网用户（默认）
+                username = f"{username}@cdu"
+                logger.info(f"校园网用户，添加@cdu后缀: {username}")
+        elif username.startswith('scxy'):
+            # 修改过密码的移动用户，添加@cmccgx后缀
+            username = f"{username}@cmccgx"
+            logger.info(f"修改过密码的移动用户，添加@cmccgx后缀: {username}")
+        elif username.startswith('"scxy"'):
+            # 修改过密码的移动用户，添加@cmccgx后缀
+            username = f"{username}@cmccgx"
+            logger.info(f"修改过密码的移动用户，添加@cmccgx后缀: {username}")
+        else:
+            # 其他情况，不添加后缀
+            logger.info(f"其他用户，不添加后缀: {username}")
 
     ppp_cmd = [
         'sudo', 'pppd',
