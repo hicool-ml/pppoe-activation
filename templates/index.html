@@ -442,7 +442,8 @@
             <p class="info-text">IP：${resp.ip || '无'}</p>
           `;
         } else {
-          const userTip = errorMessages[resp.error_code] || resp.error_message || "未知错误";
+          // 优先使用后端返回的详细错误消息，如果没有则使用错误码映射
+          const userTip = resp.error_message || errorMessages[resp.error_code] || "未知错误";
           resultContent.innerHTML = `
             <p class="error">❌ 激活失败</p>
             <p class="info-text">错误码：${resp.error_code}</p>

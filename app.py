@@ -126,8 +126,25 @@ def detect_pppoe_error(log_file):
         with open(log_file, 'r', encoding='utf-8') as f:
             content = f.read()
         
-        # 检查PAP认证失败
+        # 检查PAP认证失败，提取详细错误信息
         if 'PAP authentication failed' in content or 'PAP AuthNak' in content:
+            # 尝试提取详细错误信息
+            auth_nak_match = re.search(r'AuthNak.*?"([^"]+)"', content)
+            if auth_nak_match:
+                error_detail = auth_nak_match.group(1)
+                # 解析常见的错误信息
+                if 'concurrency' in error_detail.lower():
+                    return "691", f"账号已在其他地方登录，请等待几分钟后重试（错误详情：{error_detail}）"
+                elif 'password' in error_detail.lower() or 'incorrect' in error_detail.lower():
+                    return "691", f"账号或密码错误，请核对后重试（错误详情：{error_detail}）"
+                elif 'disabled' in error_detail.lower() or 'deregistered' in error_detail.lower():
+                    return "691", f"账号已被停用或注销，请联系运营商（错误详情：{error_detail}）"
+                elif 'expired' in error_detail.lower():
+                    return "691", f"账号已过期，请联系运营商（错误详情：{error_detail}）"
+                elif 'locked' in error_detail.lower():
+                    return "691", f"账号已被锁定，请联系运营商（错误详情：{error_detail}）"
+                else:
+                    return "691", f"账号或密码错误，请核对后重试（错误详情：{error_detail}）"
             return "691", "账号或密码错误，请核对后重试"
         
         # 检查PPPOE Discovery失败（无法找到BRAS）
@@ -139,7 +156,7 @@ def detect_pppoe_error(log_file):
             return "734", "PPP链路控制协议终止，网络异常请稍后再试"
         
         # 检查PPP协议超时
-        if 'LCP timeout' in content or 'LCP EchoReq' in content and 'LCP EchoRep' not in content:
+        if 'LCP timeout' in content or ('LCP EchoReq' in content and 'LCP EchoRep' not in content):
             return "718", "PPP协议超时，可能网络拥塞或服务器无响应"
         
         # 检查连接被远程计算机强制关闭
@@ -152,6 +169,23 @@ def detect_pppoe_error(log_file):
         
         # 检查CHAP认证失败
         if 'CHAP authentication failed' in content or 'CHAP AuthNak' in content:
+            # 尝试提取详细错误信息
+            auth_nak_match = re.search(r'AuthNak.*?"([^"]+)"', content)
+            if auth_nak_match:
+                error_detail = auth_nak_match.group(1)
+                # 解析常见的错误信息
+                if 'concurrency' in error_detail.lower():
+                    return "691", f"账号已在其他地方登录，请等待几分钟后重试（错误详情：{error_detail}）"
+                elif 'password' in error_detail.lower() or 'incorrect' in error_detail.lower():
+                    return "691", f"账号或密码错误，请核对后重试（错误详情：{error_detail}）"
+                elif 'disabled' in error_detail.lower() or 'deregistered' in error_detail.lower():
+                    return "691", f"账号已被停用或注销，请联系运营商（错误详情：{error_detail}）"
+                elif 'expired' in error_detail.lower():
+                    return "691", f"账号已过期，请联系运营商（错误详情：{error_detail}）"
+                elif 'locked' in error_detail.lower():
+                    return "691", f"账号已被锁定，请联系运营商（错误详情：{error_detail}）"
+                else:
+                    return "691", f"账号或密码错误，请核对后重试（错误详情：{error_detail}）"
             return "691", "账号或密码错误，请核对后重试"
         
         # 默认返回未获取到IP地址
@@ -279,14 +313,13 @@ def activate():
 
     # === 锁外执行拨号（避免长时间持有锁）===
 
-    # 根据ISP类型添加后缀
-    # 校园网：纯数字学号，添加@cdu后缀
-    # 移动：纯数字学号或scxy开头，添加@cmccgx后缀
-    # 电信：纯数字学号，添加@96301后缀
-    # 联通：纯数字学号，添加@10010后缀
-    # 修改过密码的移动用户：scxy开头，添加@cmccgx后缀
+    # 根据ISP类型添加后缀（系统只负责添加尾缀，密码由用户手动输入）
+    # 校园网：输入学号 → 系统添加 @cdu 后缀
+    # 移动：输入纯数字手机号 → 系统添加 @cmccgx 后缀；修改过密码输入 scxy + 手机号 → 系统添加 @cmccgx 后缀
+    # 电信：输入纯数字手机号 → 系统添加 @96301 后缀
+    # 联通：输入纯数字手机号 → 系统添加 @10010 后缀
     if '@' not in username:
-        # 检查是否为纯数字（校园网学号）
+        # 检查是否为纯数字
         if username.isdigit():
             # 根据ISP类型添加后缀
             if isp == 'cmccgx':
@@ -309,13 +342,9 @@ def activate():
             # 修改过密码的移动用户，添加@cmccgx后缀
             username = f"{username}@cmccgx"
             logger.info(f"修改过密码的移动用户，添加@cmccgx后缀: {username}")
-        elif username.startswith('"scxy"'):
-            # 修改过密码的移动用户，添加@cmccgx后缀
-            username = f"{username}@cmccgx"
-            logger.info(f"修改过密码的移动用户，添加@cmccgx后缀: {username}")
-        else:
-            # 其他情况，不添加后缀
-            logger.info(f"其他用户，不添加后缀: {username}")
+        
+        # 更新日志记录为完整账号
+        log_data["username"] = username
 
     ppp_cmd = [
         'sudo', 'pppd',

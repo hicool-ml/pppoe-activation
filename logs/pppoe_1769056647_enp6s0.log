@@ -1,0 +1,39 @@
+Send PPPOE Discovery V1T1 PADI session 0x0 length 12
+ dst ff:ff:ff:ff:ff:ff  src 02:2c:1f:6a:a1:6c
+ [service-name] [host-uniq da 00 00 00]
+Send PPPOE Discovery V1T1 PADI session 0x0 length 12
+ dst ff:ff:ff:ff:ff:ff  src 02:2c:1f:6a:a1:6c
+ [service-name] [host-uniq da 00 00 00]
+Recv PPPOE Discovery V1T1 PADO session 0x0 length 46
+ dst 02:2c:1f:6a:a1:6c  src 4c:6d:58:4c:37:d8
+ [AC-name CDU-BRAS-1] [host-uniq da 00 00 00] [service-name] [AC-cookie 24 85 3b 86 96 a8 4a 5d 5b f2 35 2c e7 83 bc aa]
+Send PPPOE Discovery V1T1 PADR session 0x0 length 32
+ dst 4c:6d:58:4c:37:d8  src 02:2c:1f:6a:a1:6c
+ [service-name] [host-uniq da 00 00 00] [AC-cookie 24 85 3b 86 96 a8 4a 5d 5b f2 35 2c e7 83 bc aa]
+Recv PPPOE Discovery V1T1 PADS session 0xe6 length 46
+ dst 02:2c:1f:6a:a1:6c  src 4c:6d:58:4c:37:d8
+ [service-name] [host-uniq da 00 00 00] [AC-name CDU-BRAS-1] [AC-cookie 24 85 3b 86 96 a8 4a 5d 5b f2 35 2c e7 83 bc aa]
+PPP session is 230
+Connected to 4C:6D:58:4C:37:D8 via interface enp6s0
+using channel 50
+Using interface ppp0
+Connect: ppp0 <--> enp6s0
+sent [LCP ConfReq id=0x1 <mru 1492> <magic 0xbe637f6a>]
+rcvd [LCP ConfReq id=0x5b <mru 1492> <auth pap> <magic 0x3d35d4ef>]
+sent [LCP ConfAck id=0x5b <mru 1492> <auth pap> <magic 0x3d35d4ef>]
+rcvd [LCP ConfAck id=0x1 <mru 1492> <magic 0xbe637f6a>]
+sent [LCP EchoReq id=0x0 magic=0xbe637f6a]
+sent [PAP AuthReq id=0x1 user="13908063548@cmccgx" password=<hidden>]
+rcvd [LCP EchoRep id=0x0 magic=0x3d35d4ef]
+rcvd [PAP AuthNak id=0x1 "109026004|109020109|Reject by concurrency control."]
+Remote message: 109026004|109020109|Reject by concurrency control.
+PAP authentication failed
+sent [LCP TermReq id=0x2 "Failed to authenticate ourselves to peer"]
+rcvd [LCP TermReq id=0x5c]
+sent [LCP TermAck id=0x5c]
+Modem hangup
+Connection terminated.
+Send PPPOE Discovery V1T1 PADT session 0xe6 length 28
+ dst 4c:6d:58:4c:37:d8  src 02:2c:1f:6a:a1:6c
+ [host-uniq da 00 00 00] [AC-cookie 24 85 3b 86 96 a8 4a 5d 5b f2 35 2c e7 83 bc aa]
+Sent PADT

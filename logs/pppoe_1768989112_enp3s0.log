@@ -1,0 +1,38 @@
+Send PPPOE Discovery V1T1 PADI session 0x0 length 12
+ dst ff:ff:ff:ff:ff:ff  src 02:42:ae:8d:78:c5
+ [service-name] [host-uniq 73 00 00 00]
+Send PPPOE Discovery V1T1 PADI session 0x0 length 12
+ dst ff:ff:ff:ff:ff:ff  src 02:42:ae:8d:78:c5
+ [service-name] [host-uniq 73 00 00 00]
+Recv PPPOE Discovery V1T1 PADO session 0x0 length 46
+ dst 02:42:ae:8d:78:c5  src 4c:6d:58:4c:37:d8
+ [AC-name CDU-BRAS-1] [host-uniq 73 00 00 00] [service-name] [AC-cookie a8 64 33 73 ac 0c 01 41 58 fc 5f 15 df 3b 8c 86]
+Send PPPOE Discovery V1T1 PADR session 0x0 length 32
+ dst 4c:6d:58:4c:37:d8  src 02:42:ae:8d:78:c5
+ [service-name] [host-uniq 73 00 00 00] [AC-cookie a8 64 33 73 ac 0c 01 41 58 fc 5f 15 df 3b 8c 86]
+Recv PPPOE Discovery V1T1 PADS session 0xa1 length 46
+ dst 02:42:ae:8d:78:c5  src 4c:6d:58:4c:37:d8
+ [service-name] [host-uniq 73 00 00 00] [AC-name CDU-BRAS-1] [AC-cookie a8 64 33 73 ac 0c 01 41 58 fc 5f 15 df 3b 8c 86]
+PPP session is 161
+Connected to 4C:6D:58:4C:37:D8 via interface enp3s0
+using channel 14
+Using interface ppp0
+Connect: ppp0 <--> enp3s0
+sent [LCP ConfReq id=0x1 <mru 1492> <magic 0xbcc7df38>]
+rcvd [LCP ConfReq id=0x4d <mru 1492> <auth pap> <magic 0x2b2e5df8>]
+sent [LCP ConfAck id=0x4d <mru 1492> <auth pap> <magic 0x2b2e5df8>]
+rcvd [LCP ConfAck id=0x1 <mru 1492> <magic 0xbcc7df38>]
+sent [LCP EchoReq id=0x0 magic=0xbcc7df38]
+sent [PAP AuthReq id=0x1 user="2021001@cdu" password=<hidden>]
+rcvd [LCP EchoRep id=0x0 magic=0x2b2e5df8]
+rcvd [PAP AuthNak id=0x1 ""]
+PAP authentication failed
+sent [LCP TermReq id=0x2 "Failed to authenticate ourselves to peer"]
+rcvd [LCP TermReq id=0x4e]
+sent [LCP TermAck id=0x4e]
+Modem hangup
+Connection terminated.
+Send PPPOE Discovery V1T1 PADT session 0xa1 length 28
+ dst 4c:6d:58:4c:37:d8  src 02:42:ae:8d:78:c5
+ [host-uniq 73 00 00 00] [AC-cookie a8 64 33 73 ac 0c 01 41 58 fc 5f 15 df 3b 8c 86]
+Sent PADT
