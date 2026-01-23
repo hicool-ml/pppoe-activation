@@ -1,48 +1,312 @@
-<!-- web/templates/admin/admin_list.html -->
 <!DOCTYPE html>
-<html lang="zh">
+<html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <title>管理员管理 - PPPoE 后台</title>
-    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>管理员管理 - PPPoE管理</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 20px 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+        }
+
+        .header h1 {
+            color: #333;
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .nav-link {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 10px;
+            padding: 12px 24px;
+            text-decoration: none;
+            color: #333;
+            font-weight: 500;
+            font-size: 14px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            transition: all 0.3s ease;
+        }
+
+        .nav-link:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+        }
+
+        .nav-link.primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .nav-link.primary:hover {
+            background: #5568d3;
+        }
+
+        .nav-link.danger {
+            background: #ef4444;
+            color: white;
+        }
+
+        .nav-link.danger:hover {
+            background: #dc2626;
+        }
+
+        .card {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            margin-bottom: 30px;
+            overflow: hidden;
+        }
+
+        .card h3 {
+            color: #333;
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 20px;
+        }
+
+        .table-responsive {
+            overflow-x: auto;
+        }
+
+        .table {
+            width: 100%;
+            border-collapse: collapse;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        .table th {
+            background: rgba(102, 126, 234, 0.9);
+            color: white;
+            padding: 15px;
+            font-weight: 600;
+            text-align: left;
+        }
+
+        .table td {
+            padding: 12px 15px;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+        }
+
+        .table tbody tr:hover {
+            background: rgba(102, 126, 234, 0.05);
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            color: white;
+        }
+
+        .badge-admin {
+            background: #667eea;
+        }
+
+        .badge-super {
+            background: #8b5cf6;
+        }
+
+        .text-muted {
+            color: #999;
+            font-size: 13px;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.3);
+        }
+
+        .btn-secondary {
+            background: rgba(102, 126, 234, 0.1);
+            color: #333;
+        }
+
+        .btn-secondary:hover {
+            background: rgba(102, 126, 234, 0.2);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+        }
+
+        .btn-danger {
+            background: #ef4444;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #dc2626;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(239, 68, 68, 0.3);
+        }
+
+        .btn-sm {
+            padding: 6px 12px;
+            font-size: 13px;
+        }
+
+        .w-100 {
+            width: 100%;
+        }
+
+        .mb-2 {
+            margin-bottom: 20px;
+        }
+
+        .mb-3 {
+            margin-bottom: 30px;
+        }
+
+        .mb-4 {
+            margin-bottom: 40px;
+        }
+
+        @media (max-width: 768px) {
+            body {
+                padding: 10px;
+            }
+
+            .header h1 {
+                font-size: 22px;
+            }
+
+            .table th, .table td {
+                padding: 10px 12px;
+                font-size: 13px;
+            }
+
+            .nav-links, .header-actions {
+                flex-direction: column;
+            }
+
+            .btn {
+                width: 100%;
+            }
+        }
+    </style>
 </head>
-<body class="bg-gray-100">
-    <div class="container mx-auto px-4 py-8">
-        <h1 class="text-3xl font-bold mb-6">管理员管理</h1>
-        <div class="flex justify-between mb-4">
-            <a href="/admin" class="px-4 py-2 bg-gray-500 text-white rounded">返回</a>
-            <a href="/admin/admins/add" class="px-4 py-2 bg-green-500 text-white rounded">添加管理员</a>
+<body>
+    <div class="container">
+        <!-- 头部 -->
+        <div class="header">
+            <h1>👥 管理员管理</h1>
+            <p>管理系统管理员账户</p>
+            <div class="header-actions">
+                <a href="/admin/add" class="btn btn-primary">➕ 添加管理员</a>
+            </div>
         </div>
 
-        <div class="bg-white rounded-lg shadow overflow-hidden">
-            <table class="min-w-full divide-y divide-gray-200">
-                <thead class="bg-gray-50">
-                    <tr>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">用户名</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">创建时间</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">操作</th>
-                    </tr>
-                </thead>
-                <tbody class="bg-white divide-y divide-gray-200">
-                    {% for user in admins %}
-                    <tr class="hover:bg-gray-50">
-                        <td class="px-6 py-4 text-sm">{{ user.id }}</td>
-                        <td class="px-6 py-4 text-sm">{{ user.username }}</td>
-                        <td class="px-6 py-4 text-sm text-gray-600">{{ user.created_at.strftime('%Y-%m-%d') }}</td>
-                        <td class="px-6 py-4 text-sm">
-                            {% if user.id != 1 %}
-                            <a href="/admin/admins/delete/{{ user.id }}" 
-                               onclick="return confirm('确定删除？')"
-                               class="text-red-500 hover:underline">删除</a>
-                            {% else %}
-                            <span class="text-gray-400">默认账户</span>
-                            {% endif %}
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+        <!-- 导航链接 -->
+        <div class="nav-links">
+            <a href="/dashboard" class="nav-link primary">📊 仪表盘</a>
+            <a href="/admin/logs" class="nav-link">📝 激活日志</a>
+            <a href="/admin/config" class="nav-link">⚙️ 系统配置</a>
+            <a href="/admin/logout" class="nav-link danger">🚪 登出</a>
+        </div>
+
+        <!-- 管理员列表 -->
+        <div class="card">
+            <h3>📋 管理员列表</h3>
+            <div class="table-responsive">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>用户名</th>
+                            <th>角色</th>
+                            <th>创建时间</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for user in admins %}
+                        <tr>
+                            <td>{{ user.id }}</td>
+                            <td><strong>{{ user.username }}</strong></td>
+                            <td>
+                                <span class="badge {% if user.role == 'super' %}badge-super{% else %}badge-admin{% endif %}">
+                                    {{ '超级管理员' if user.role == 'super' else '管理员' }}
+                                </span>
+                            </td>
+                            <td>{{ user.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                            <td>
+                                {% if user.id != 1 %}
+                                    <a href="/admin/delete" method="POST" onclick="return confirm('确定删除管理员 {{ user.username }}？')" class="btn btn-danger btn-sm">删除</a>
+                                {% else %}
+                                    <span class="text-muted">默认账户</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="text-center mb-3">
+            <small class="text-muted">共 {{ admins|length }} 位管理员</small>
         </div>
     </div>
 </body>

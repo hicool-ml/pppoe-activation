@@ -3,136 +3,300 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>管理员管理 - PPPoE 激活系统</title>
-    <link href="/static/css/bootstrap.min.css" rel="stylesheet">
+    <title>管理员管理 - PPPoE管理</title>
     <style>
-        body { padding-top: 60px; }
-        .btn-danger { background-color: #dc3545; border-color: #dc3545; }
-        .btn-danger:hover { background-color: #c82333; border-color: #bd2130; }
-        .table-hover tbody tr:hover { background-color: #f8f9fa; }
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background-color: #f8f9fa;
+            display: flex;
+            justify-content: center;
+            padding: 40px 20px;
+        }
+        .form-wrapper {
+            width: 100%;
+            max-width: 1400px;
+        }
+        .tabs {
+            display: flex;
+            position: relative;
+            z-index: 2;
+            margin-bottom: 0;
+        }
+        .tab {
+            padding: 14px 28px;
+            background: #f1f3f5;
+            cursor: pointer;
+            border-radius: 12px 12px 0 0;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            font-weight: 500;
+            color: #495057;
+            border: none;
+            position: relative;
+            margin-right: 0;
+            box-shadow: inset 0 -2px 4px rgba(0,0,0,0.05);
+            text-decoration: none;
+        }
+        .tab::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 2px;
+            background: transparent;
+            opacity: 0;
+            transition: inherit;
+        }
+        .tab.active {
+            background: white;
+            color: #212529;
+            box-shadow: none;
+            transform: translateY(0);
+            z-index: 3;
+        }
+        .tab.active::after {
+            opacity: 1;
+            bottom: 0;
+            background: white;
+            height: 2px;
+        }
+        .form-container {
+            background: white;
+            border-radius: 0 12px 12px 12px;
+            padding: 30px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+            position: relative;
+            z-index: 1;
+            margin-top: 0;
+            border-top: none;
+        }
+        .form-page {
+            display: none;
+        }
+        .form-page.active {
+            display: block;
+            animation: fadeIn 0.3s ease;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0.8; transform: translateY(5px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        /* 管理员列表样式 */
+        .card {
+            background: #f8f9fa;
+            border-radius: 12px;
+            padding: 25px;
+            margin-bottom: 20px;
+        }
+        .card h3 {
+            color: #212529;
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 20px;
+        }
+        .table-responsive {
+            overflow-x: auto;
+        }
+        .table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        }
+        .table th {
+            background: #667eea;
+            color: white;
+            padding: 15px;
+            font-weight: 600;
+            text-align: left;
+        }
+        .table td {
+            padding: 12px 15px;
+            border-bottom: 1px solid #dee2e6;
+        }
+        .table tbody tr:hover {
+            background: #f8f9fa;
+        }
+        .badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            color: white;
+        }
+        .badge-admin {
+            background: #667eea;
+        }
+        .badge-super {
+            background: #8b5cf6;
+        }
+        .btn {
+            padding: 6px 12px;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-right: 5px;
+        }
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+        .btn-primary:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.3);
+        }
+        .btn-danger {
+            background: #ef4444;
+            color: white;
+        }
+        .btn-danger:hover {
+            background: #dc2626;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(239, 68, 68, 0.3);
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: #495057;
+            font-size: 14px;
+        }
+        input[type="text"],
+        input[type="password"] {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: all 0.3s;
+            background: #fff;
+        }
+        input[type="text"]:focus,
+        input[type="password"]:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        .row {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+        .col {
+            flex: 1;
+            min-width: 200px;
+        }
+        .alert {
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            font-size: 14px;
+        }
+        .alert-danger {
+            background: #fee;
+            border: 1px solid #fcc;
+            color: #c33;
+        }
     </style>
 </head>
 <body>
-<nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
-    <div class="container">
-        <a class="navbar-brand" href="/admin">🔐 管理后台</a>
-        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
-            <span class="navbar-toggler-icon"></span>
-        </button>
-        <div class="collapse navbar-collapse" id="navbarNav">
-            <ul class="navbar-nav me-auto">
-                <li class="nav-item">
-                    <a class="nav-link" href="/admin">仪表盘</a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link" href="/admin/logs">日志记录</a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link" href="/admin/config">系统配置</a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link active" href="/admin_list">管理员管理</a>
-                </li>
-            </ul>
-            <ul class="navbar-nav">
-                <li class="nav-item">
-                    <a class="nav-link" href="/admin/logout">退出登录</a>
-                </li>
-            </ul>
+    <div class="form-wrapper">
+        <div class="tabs">
+            <a href="/dashboard" class="tab">📊 仪表盘</a>
+            <a href="/logs" class="tab">📝 激活日志</a>
+            <a href="/config" class="tab">⚙️ 系统配置</a>
+            <a href="/admin_list" class="tab active">👥 管理员管理</a>
+            <a href="/logout" class="tab">🚪 登出</a>
         </div>
-    </div>
-</nav>
-
-<div class="container mt-4">
-    <h2 class="mb-4">👥 管理员管理</h2>
-
-    {% if error %}
-    <div class="alert alert-danger" role="alert">
-        <strong>错误：</strong>{{ error }}
-    </div>
-    {% endif %}
-
-    <div class="card mb-4">
-        <div class="card-header bg-primary text-white">
-            <h5 class="mb-0">管理员列表</h5>
-        </div>
-        <div class="card-body">
-            {% if admins %}
-            <div class="table-responsive">
-                <table class="table table-striped table-hover">
-                    <thead>
-                        <tr>
-                            <th>用户名</th>
-                            <th>角色</th>
-                            <th>创建时间</th>
-                            <th>操作</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for a in admins %}
-                        <tr>
-                            <td><strong>{{ a.username }}</strong></td>
-                            <td>
-                                {% if a.role == 'super' %}
-                                <span class="badge bg-danger">超级管理员</span>
-                                {% else %}
-                                <span class="badge bg-primary">管理员</span>
-                                {% endif %}
-                            </td>
-                            <td>{{ a.created_at.strftime('%Y-%m-%d %H:%M') if a.created_at else 'N/A' }}</td>
-                            <td>
-                                <form action="{{ url_for('admin_delete') }}" method="post" style="display:inline">
-                                    <input type="hidden" name="username" value="{{ a.username }}">
-                                    <button type="submit" class="btn btn-sm btn-danger" 
-                                            onclick="return confirm('确定要删除管理员 {{ a.username }} 吗？')">
-                                        删除
-                                    </button>
-                                </form>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-            {% else %}
-            <div class="alert alert-info">
-                暂无管理员账号
+        
+        <div class="form-container">
+            {% if error %}
+            <div class="alert alert-danger">
+                <strong>错误：</strong>{{ error }}
             </div>
             {% endif %}
-        </div>
-    </div>
-
-    <div class="card">
-        <div class="card-header bg-success text-white">
-            <h5 class="mb-0">新增管理员</h5>
-        </div>
-        <div class="card-body">
-            <form action="{{ url_for('admin_add') }}" method="post">
-                <div class="row mb-3">
-                    <div class="col-md-4">
-                        <label for="username" class="form-label">用户名</label>
-                        <input type="text" class="form-control" id="username" name="username" required>
-                    </div>
-                    <div class="col-md-4">
-                        <label for="password" class="form-label">密码</label>
-                        <input type="password" class="form-control" id="password" name="password" required>
-                    </div>
-                    <div class="col-md-4">
-                        <label for="role" class="form-label">角色</label>
-                        <select class="form-select" id="role" name="role">
-                            <option value="admin">管理员</option>
-                            <option value="super">超级管理员</option>
-                        </select>
-                    </div>
+            
+            <!-- 管理员列表 -->
+            <div class="card">
+                <h3>📋 管理员列表</h3>
+                <div class="table-responsive">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>用户名</th>
+                                <th>角色</th>
+                                <th>创建时间</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for a in admins %}
+                            <tr>
+                                <td><strong>{{ a.username }}</strong></td>
+                                <td>
+                                    <span class="badge {% if a.role == 'super' %}badge-super{% else %}badge-admin{% endif %}">
+                                        {{ '超级管理员' if a.role == 'super' else '管理员' }}
+                                    </span>
+                                </td>
+                                <td>{{ a.created_at.strftime('%Y-%m-%d %H:%M') if a.created_at else 'N/A' }}</td>
+                                <td>
+                                    <a href="/change_password?username={{ a.username }}" class="btn btn-primary btn-sm">
+                                        修改密码
+                                    </a>
+                                    <form action="/admin_delete" method="post" style="display:inline">
+                                        <input type="hidden" name="username" value="{{ a.username }}">
+                                        <button type="submit" class="btn btn-danger btn-sm"
+                                                onclick="return confirm('确定要删除管理员 {{ a.username }} 吗？')">
+                                            删除
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
                 </div>
-                <button type="submit" class="btn btn-success">
-                    <i class="bi bi-plus-circle"></i> 添加管理员
-                </button>
-            </form>
+            </div>
+            
+            <!-- 新增管理员 -->
+            <div class="card">
+                <h3>➕ 新增管理员</h3>
+                <form action="/admin_add" method="post">
+                    <div class="row">
+                        <div class="col">
+                            <div class="form-group">
+                                <label for="username">用户名</label>
+                                <input type="text" id="username" name="username" required>
+                            </div>
+                        </div>
+                        <div class="col">
+                            <div class="form-group">
+                                <label for="password">密码</label>
+                                <input type="password" id="password" name="password" required>
+                            </div>
+                        </div>
+                        <div class="col">
+                            <div class="form-group">
+                                <label>&nbsp;</label>
+                                <button type="submit" class="btn btn-primary w-100" style="padding: 12px 20px;">
+                                    添加管理员
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
         </div>
     </div>
-</div>
-
-<script src="/static/js/jquery.min.js"></script>
 </body>
 </html>

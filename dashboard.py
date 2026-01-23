@@ -85,12 +85,18 @@ ISP_COLORS = {
 # 管理员登录/登出
 # =============================
 
-@app.route('/admin/login', methods=['GET', 'POST'])
+@app.route('/', methods=['GET'])
+def index():
+    # 根路径重定向到登录页面
+    return redirect('/login')
+
+
+@app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
         username = request.form.get('username')
         password = request.form.get('password')
-        
+
         # 使用pbkdf2_hmac加密（与init_db.py一致）
         user = AdminUser.query.filter_by(username=username).first()
         if user:
@@ -102,48 +108,23 @@ def login():
             ).hex()
             if pwd_hash == user.password_hash:
                 session['admin'] = user.username
-                return redirect('/admin')
-        
+                return redirect('/dashboard')
+
         return render_template('admin/login.html', error="用户名或密码错误")
     return render_template('admin/login.html')
 
 
-@app.route('/admin/logout')
+@app.route('/logout')
 def logout():
     session.pop('admin', None)
-    return redirect('/admin/login')
+    return redirect('/login')
 
 
-@app.route('/admin')
-def admin_dashboard():
-    if 'admin' not in session:
-        return redirect('/admin/login')
-    
-    db = SessionLocal()
-    try:
-        total = db.query(ActivationLog).count()
-        success = db.query(ActivationLog).filter_by(success=True).count()
-        failure = total - success
-        success_rate = f"{success / total * 100:.1f}%" if total else "0%"
-        # 按 ISP 统计成功数
-        stats = {}
-        for isp_key, isp_name in ISP_DISPLAY.items():
-            count = db.query(ActivationLog).filter_by(isp=isp_key, success=True).count()
-            stats[isp_name] = count
-        
-        return render_template('admin/dashboard.html',
-                              total=total, success=success,
-                              failure=failure, success_rate=success_rate,
-                              stats=stats, isp_colors=ISP_COLORS)
-    finally:
-        db.close()
-
-
-@app.route('/admin/logs')
+@app.route('/logs')
 def admin_logs():
     if 'admin' not in session:
-        return redirect('/admin/login')
-    
+        return redirect('/login')
+
     db = SessionLocal()
     try:
         page = request.args.get('page', 1, type=int)
@@ -152,7 +133,7 @@ def admin_logs():
         total = query.count()
         offset = (page - 1) * per_page
         logs = query.offset(offset).limit(per_page).all()
-        
+
         # 创建一个简单的Pagination对象
         class Pagination:
             def __init__(self, items, page, per_page, total):
@@ -165,18 +146,18 @@ def admin_logs():
                 self.has_next = page < self.pages
                 self.prev_num = page - 1 if self.has_prev else None
                 self.next_num = page + 1 if self.has_next else None
-        
+
         pagination = Pagination(logs, page, per_page, total)
         return render_template('admin/logs.html', logs=pagination, ISP_DISPLAY=ISP_DISPLAY, ISP_COLORS=ISP_COLORS)
     finally:
         db.close()
 
 
-@app.route('/admin/api/logs')
+@app.route('/api/logs')
 def api_logs():
     if 'admin' not in session:
         return jsonify({"error": "未登录"}), 401
-    
+
     db = SessionLocal()
     try:
         logs = db.query(ActivationLog).order_by(ActivationLog.id.desc()).limit(100).all()
@@ -355,12 +336,12 @@ def save_config(data):
         return False
 
 
-@app.route('/admin/config')
+@app.route('/config')
 def config_page():
     """配置页面"""
     if 'admin' not in session:
-        return redirect('/admin/login')
-    
+        return redirect('/login')
+
     available_interfaces = get_available_interfaces()
     current_config = get_current_config()
     return render_template('init_config.html',
@@ -368,22 +349,22 @@ def config_page():
                        current_config=current_config)
 
 
-@app.route('/admin/api/interfaces')
+@app.route('/api/interfaces')
 def api_interfaces():
     """获取可用网卡列表"""
     if 'admin' not in session:
         return jsonify({'error': '未登录'}), 401
-    
+
     interfaces = get_available_interfaces()
     return jsonify({'interfaces': interfaces})
 
 
-@app.route('/admin/api/config', methods=['GET', 'POST'])
+@app.route('/api/config', methods=['GET', 'POST'])
 def api_config():
     """获取或保存配置"""
     if 'admin' not in session:
         return jsonify({'error': '未登录'}), 401
-    
+
     if request.method == 'GET':
         config = get_current_config()
         return jsonify(config)
@@ -396,12 +377,12 @@ def api_config():
             return jsonify({'success': False, 'message': f'配置保存失败: {str(e)}'}), 500
 
 
-@app.route('/admin/save', methods=['POST'])
+@app.route('/save', methods=['POST'])
 def save():
     """保存配置"""
     if 'admin' not in session:
-        return redirect('/admin/login')
-    
+        return redirect('/login')
+
     try:
         data = {
             'interfaces': request.form.getlist('interfaces'),
@@ -413,9 +394,9 @@ def save():
             'admin_port': int(request.form.get('admin_port', 8081)),
             'tz': request.form.get('tz', 'Asia/Shanghai')
         }
-        
+
         save_config(data)
-        
+
         return render_template('init_success.html', config=data)
     except Exception as e:
         return render_template('init_config.html',
@@ -468,13 +449,16 @@ def get_logs():
 # =============================
 # Dashboard 页面
 # =============================
-@app.route('/dashboard')
+@app.route('/dashboard', methods=['GET', 'POST'])
 def dashboard():
+    if 'admin' not in session:
+        return redirect('/login')
+
     try:
         sync_logs(latest_only=True)
     except Exception as e:
         logger.error(f"自动同步失败: {e}")
-    
+
     # 获取统计数据
     db = SessionLocal()
     try:
@@ -487,7 +471,7 @@ def dashboard():
                 if date not in count_by_day:
                     count_by_day[date] = 0
                 count_by_day[date] += 1
-        
+
         # 按ISP统计
         isp_count = {}
         for log in logs:
@@ -495,48 +479,29 @@ def dashboard():
             if isp not in isp_count:
                 isp_count[isp] = 0
             isp_count[isp] += 1
-        
+
+        # 统计成功和失败次数
+        success_count = 0
+        failure_count = 0
+        for log in logs:
+            if log.success:
+                success_count += 1
+            else:
+                failure_count += 1
+
         period = "最近记录"
     finally:
         db.close()
-    
-    return render_template('dashboard.html', period=period, count_by_day=count_by_day, isp_count=isp_count)
 
-
-@app.route('/records')
-def records():
-    """查看拨号记录"""
-    page = request.args.get('page', 1, type=int)
-    per_page = request.args.get('per_page', 20, type=int)
-    offset = (page - 1) * per_page
-    
-    db = SessionLocal()
-    try:
-        total = db.query(ActivationLog).count()
-        logs = db.query(ActivationLog).order_by(ActivationLog.id.desc()).offset(offset).limit(per_page).all()
-        
-        data = [{
-            'name': log.name or '',
-            'username': log.username or '',
-            'isp': log.isp or '',
-            'success': log.success,
-            'error_code': log.error_code or '',
-            'activated_at': log.timestamp or '',
-            'mac': log.mac or '',
-            'ip': log.ip or ''
-        } for log in logs]
-    finally:
-        db.close()
-    
-    return render_template('records.html', data=data, page=page, per_page=per_page, total=total)
+    return render_template('dashboard.html', period=period, count_by_day=count_by_day, isp_count=isp_count, success_count=success_count, failure_count=failure_count)
 
 
 @app.route('/admin_list')
 def admin_list():
     """管理员管理"""
     if 'admin' not in session:
-        return redirect('/admin/login')
-    
+        return redirect('/login')
+
     admins = AdminUser.query.all()
     return render_template('admin_list.html', admins=admins)
 
@@ -545,15 +510,15 @@ def admin_list():
 def admin_add():
     """添加管理员"""
     if 'admin' not in session:
-        return redirect('/admin/login')
-    
+        return redirect('/login')
+
     username = request.form.get('username')
     password = request.form.get('password')
     role = request.form.get('role', 'admin')
-    
+
     if AdminUser.query.filter_by(username=username).first():
         return render_template('admin_list.html', admins=AdminUser.query.all(), error='用户名已存在')
-    
+
     # 使用pbkdf2_hmac加密（与init_db.py一致）
     salt = secrets.token_hex(16)
     pwd_hash = hashlib.pbkdf2_hmac(
@@ -565,7 +530,7 @@ def admin_add():
     admin = AdminUser(username=username, password_hash=pwd_hash, salt=salt, role=role)
     db.session.add(admin)
     db.session.commit()
-    
+
     return redirect(url_for('admin_list'))
 
 
@@ -573,15 +538,63 @@ def admin_add():
 def admin_delete():
     """删除管理员"""
     if 'admin' not in session:
-        return redirect('/admin/login')
-    
+        return redirect('/login')
+
     username = request.form.get('username')
     admin = AdminUser.query.filter_by(username=username).first()
     if admin:
         db.session.delete(admin)
         db.session.commit()
-    
+
     return redirect(url_for('admin_list'))
+
+
+@app.route('/change_password', methods=['GET', 'POST'])
+def admin_change_password():
+    """修改管理员密码"""
+    if 'admin' not in session:
+        return redirect('/login')
+
+    # 获取要修改密码的用户名（从URL参数获取）
+    target_username = request.args.get('username')
+    current_username = session.get('admin')
+
+    # 如果没有指定用户名，默认修改当前用户的密码
+    if not target_username:
+        target_username = current_username
+
+    # 获取目标用户
+    target_user = AdminUser.query.filter_by(username=target_username).first()
+    if not target_user:
+        return render_template('admin/change_password.html', error='用户不存在')
+
+    if request.method == 'POST':
+        new_password = request.form.get('new_password')
+        confirm_password = request.form.get('confirm_password')
+
+        # 验证新密码
+        if new_password != confirm_password:
+            return render_template('admin/change_password.html', error='两次输入的密码不一致', username=target_username)
+
+        if len(new_password) < 6:
+            return render_template('admin/change_password.html', error='密码长度不能少于6位', username=target_username)
+
+        # 更新密码
+        new_salt = secrets.token_hex(16)
+        new_pwd_hash = hashlib.pbkdf2_hmac(
+            'sha256',
+            new_password.encode(),
+            new_salt.encode(),
+            100000
+        ).hex()
+
+        target_user.password_hash = new_pwd_hash
+        target_user.salt = new_salt
+        db.session.commit()
+
+        return render_template('admin/change_password.html', success='密码修改成功', username=target_username)
+
+    return render_template('admin/change_password.html', username=target_username)
 
 
 # =============================

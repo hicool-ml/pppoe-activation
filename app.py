@@ -10,6 +10,9 @@ import re
 import fcntl
 import logging
 from config import BASE_DIR, PPP_LOG_DIR, APP_PORT
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from models import ActivationLog, Base
 
 app = Flask(__name__, static_folder='static', template_folder='templates')
 app.secret_key = 'pppoe-activation-secret-key-change-in-production'
@@ -17,6 +20,12 @@ app.secret_key = 'pppoe-activation-secret-key-change-in-production'
 # 配置日志
 logging.basicConfig(level=logging.INFO, format='[%(levelname)s] %(message)s')
 logger = logging.getLogger(__name__)
+
+# 数据库配置
+DATABASE_PATH = '/opt/pppoe-activation/instance/database.db'
+engine = create_engine(f'sqlite:///{DATABASE_PATH}', echo=False)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+Base.metadata.create_all(bind=engine)
 
 LOG_FILE = os.path.join(BASE_DIR, 'activation_log.jsonl')
 LOCK_FILE = os.path.join(BASE_DIR, 'activation.lock')  # 全局锁文件
@@ -58,9 +67,30 @@ NETWORK_INTERFACES = get_network_interfaces_from_db()
 
 
 def log_activation(data):
-    """记录激活日志"""
-    with open(LOG_FILE, 'a', encoding='utf-8') as f:
-        f.write(json.dumps(data, ensure_ascii=False) + "\n")
+    """记录激活日志到数据库"""
+    try:
+        session = SessionLocal()
+        log_entry = ActivationLog(
+            name=data.get('name'),
+            role=data.get('role'),
+            isp=data.get('isp'),
+            username=data.get('username'),
+            success=data.get('success', False),
+            ip=data.get('ip'),
+            mac=data.get('mac'),
+            error_code=data.get('error_code'),
+            error_message=data.get('error_message'),
+            timestamp=data.get('timestamp', time.strftime('%Y-%m-%d %H:%M:%S', time.localtime()))
+        )
+        session.add(log_entry)
+        session.commit()
+        logger.info(f"日志已写入数据库: {data.get('username')} - {data.get('success', False)}")
+    except Exception as e:
+        logger.error(f"写入数据库失败: {e}")
+        # 如果数据库写入失败，回滚事务
+        session.rollback()
+    finally:
+        session.close()
 
 
 def random_mac():
@@ -343,7 +373,7 @@ def activate():
             username = f"{username}@cmccgx"
             logger.info(f"修改过密码的移动用户，添加@cmccgx后缀: {username}")
         
-        # 更新日志记录为完整账号
+        # 更新日志记录为完整账号（在调用log_activation之前）
         log_data["username"] = username
 
     ppp_cmd = [
