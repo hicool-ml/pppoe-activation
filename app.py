@@ -1,5 +1,5 @@
 # app.py - 已验证拨号功能，补全日志字段
-from flask import Flask, request, jsonify, render_template, redirect, url_for, session
+from flask import Flask, request, jsonify, render_template, redirect, url_for
 import subprocess
 import os
 import random
@@ -8,24 +8,9 @@ import time
 import json
 import re
 import fcntl
-import logging
-from config import BASE_DIR, PPP_LOG_DIR, APP_PORT
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from models import ActivationLog, Base
+from config import BASE_DIR, NETWORK_INTERFACES, PPP_LOG_DIR, APP_PORT
 
 app = Flask(__name__, static_folder='static', template_folder='templates')
-app.secret_key = 'pppoe-activation-secret-key-change-in-production'
-
-# 配置日志
-logging.basicConfig(level=logging.INFO, format='[%(levelname)s] %(message)s')
-logger = logging.getLogger(__name__)
-
-# 数据库配置
-DATABASE_PATH = '/opt/pppoe-activation/instance/database.db'
-engine = create_engine(f'sqlite:///{DATABASE_PATH}', echo=False)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-Base.metadata.create_all(bind=engine)
 
 LOG_FILE = os.path.join(BASE_DIR, 'activation_log.jsonl')
 LOCK_FILE = os.path.join(BASE_DIR, 'activation.lock')  # 全局锁文件
@@ -33,64 +18,11 @@ CONFIG_FILE = '/opt/pppoe-activation/config.py'
 ENV_FILE = '/opt/pppoe-activation/.env'
 INIT_FLAG_FILE = '/opt/pppoe-activation/.initialized'
 
-# 从数据库读取网络接口配置
-def get_network_interfaces_from_db():
-    """从数据库读取网络接口配置"""
-    try:
-        from flask_sqlalchemy import SQLAlchemy
-        db_app = Flask(__name__)
-        db_app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:////opt/pppoe-activation/instance/database.db'
-        db_app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-        db = SQLAlchemy(db_app)
-        
-        class Config(db.Model):
-            id = db.Column(db.Integer, primary_key=True)
-            name = db.Column(db.String(50), unique=True)
-            value = db.Column(db.String(500))
-        
-        with db_app.app_context():
-            config = Config.query.filter_by(name='NETWORK_INTERFACES').first()
-            if config and config.value:
-                interfaces = config.value.split()
-                logger.info(f"从数据库读取网络接口配置: {interfaces}")
-                return interfaces
-    except Exception as e:
-        logger.error(f"从数据库读取网络接口配置失败: {e}")
-    
-    # 如果数据库读取失败，使用config.py中的配置
-    from config import NETWORK_INTERFACES as CONFIG_INTERFACES
-    logger.info(f"使用config.py中的网络接口配置: {CONFIG_INTERFACES}")
-    return CONFIG_INTERFACES
-
-# 获取网络接口配置
-NETWORK_INTERFACES = get_network_interfaces_from_db()
-
 
 def log_activation(data):
-    """记录激活日志到数据库"""
-    try:
-        session = SessionLocal()
-        log_entry = ActivationLog(
-            name=data.get('name'),
-            role=data.get('role'),
-            isp=data.get('isp'),
-            username=data.get('username'),
-            success=data.get('success', False),
-            ip=data.get('ip'),
-            mac=data.get('mac'),
-            error_code=data.get('error_code'),
-            error_message=data.get('error_message'),
-            timestamp=data.get('timestamp', time.strftime('%Y-%m-%d %H:%M:%S', time.localtime()))
-        )
-        session.add(log_entry)
-        session.commit()
-        logger.info(f"日志已写入数据库: {data.get('username')} - {data.get('success', False)}")
-    except Exception as e:
-        logger.error(f"写入数据库失败: {e}")
-        # 如果数据库写入失败，回滚事务
-        session.rollback()
-    finally:
-        session.close()
+    """记录激活日志"""
+    with open(LOG_FILE, 'a', encoding='utf-8') as f:
+        f.write(json.dumps(data, ensure_ascii=False) + "\n")
 
 
 def random_mac():
@@ -110,7 +42,7 @@ def set_interface_mac(iface, mac):
         subprocess.run(['sudo', '/opt/pppoe-activation/mac_set.sh', iface, mac], check=True)
         return True
     except subprocess.CalledProcessError as e:
-        logger.error(f"设置 MAC 失败: {e}")
+        print(f"[ERROR] 设置 MAC 失败: {e}")
         return False
 
 
@@ -127,102 +59,8 @@ def get_ip_from_interface(iface):
         ip_match = re.search(r'inet (\d+\.\d+\.\d+\.\d+)', res.stdout)
         return ip_match.group(1) if ip_match else None
     except Exception as e:
-        logger.error(f"获取IP失败: {e}")
+        print(f"[ERROR] 获取IP失败: {e}")
         return None
-
-
-def check_interface_carrier(iface):
-    """检查网卡是否有物理连接（carrier状态）"""
-    try:
-        # 检查/sys/class/net/<iface>/carrier文件
-        carrier_path = f"/sys/class/net/{iface}/carrier"
-        if os.path.exists(carrier_path):
-            with open(carrier_path, 'r') as f:
-                carrier = f.read().strip()
-                result = carrier == '1'
-                logger.info(f"网卡 {iface} carrier状态: {carrier} ({'有连接' if result else '无连接'})")
-                return result
-        else:
-            logger.warning(f"无法检查网卡 {iface} 的carrier状态")
-            return True  # 如果无法检查，假设有连接
-    except Exception as e:
-        logger.error(f"检查网卡 {iface} carrier状态失败: {e}")
-        return True  # 如果检查失败，假设有连接
-
-
-def detect_pppoe_error(log_file):
-    """检测PPPOE拨号错误，返回错误码和错误消息"""
-    try:
-        with open(log_file, 'r', encoding='utf-8') as f:
-            content = f.read()
-        
-        # 检查PAP认证失败，提取详细错误信息
-        if 'PAP authentication failed' in content or 'PAP AuthNak' in content:
-            # 尝试提取详细错误信息
-            auth_nak_match = re.search(r'AuthNak.*?"([^"]+)"', content)
-            if auth_nak_match:
-                error_detail = auth_nak_match.group(1)
-                # 解析常见的错误信息
-                if 'concurrency' in error_detail.lower():
-                    return "691", f"账号已在其他地方登录，请等待几分钟后重试（错误详情：{error_detail}）"
-                elif 'password' in error_detail.lower() or 'incorrect' in error_detail.lower():
-                    return "691", f"账号或密码错误，请核对后重试（错误详情：{error_detail}）"
-                elif 'disabled' in error_detail.lower() or 'deregistered' in error_detail.lower():
-                    return "691", f"账号已被停用或注销，请联系运营商（错误详情：{error_detail}）"
-                elif 'expired' in error_detail.lower():
-                    return "691", f"账号已过期，请联系运营商（错误详情：{error_detail}）"
-                elif 'locked' in error_detail.lower():
-                    return "691", f"账号已被锁定，请联系运营商（错误详情：{error_detail}）"
-                else:
-                    return "691", f"账号或密码错误，请核对后重试（错误详情：{error_detail}）"
-            return "691", "账号或密码错误，请核对后重试"
-        
-        # 检查PPPOE Discovery失败（无法找到BRAS）
-        if 'Timeout waiting for PADO packets' in content or 'Unable to complete PPPoE Discovery' in content:
-            return "678", "远程计算机无响应，可能是网络不可达或线路未接通"
-        
-        # 检查LCP协商失败
-        if 'LCP terminated by peer' in content:
-            return "734", "PPP链路控制协议终止，网络异常请稍后再试"
-        
-        # 检查PPP协议超时
-        if 'LCP timeout' in content or ('LCP EchoReq' in content and 'LCP EchoRep' not in content):
-            return "718", "PPP协议超时，可能网络拥塞或服务器无响应"
-        
-        # 检查连接被远程计算机强制关闭
-        if 'Modem hangup' in content or 'Connection terminated' in content:
-            return "629", "远程计算机强制关闭连接，请稍后再试"
-        
-        # 检查没有收到PADO响应（网卡没有物理连接）
-        if 'Send PPPOE Discovery' in content and 'Recv PPPOE Discovery' not in content:
-            return "630", "连接失败，设备不可用，请检查本地网卡或线路"
-        
-        # 检查CHAP认证失败
-        if 'CHAP authentication failed' in content or 'CHAP AuthNak' in content:
-            # 尝试提取详细错误信息
-            auth_nak_match = re.search(r'AuthNak.*?"([^"]+)"', content)
-            if auth_nak_match:
-                error_detail = auth_nak_match.group(1)
-                # 解析常见的错误信息
-                if 'concurrency' in error_detail.lower():
-                    return "691", f"账号已在其他地方登录，请等待几分钟后重试（错误详情：{error_detail}）"
-                elif 'password' in error_detail.lower() or 'incorrect' in error_detail.lower():
-                    return "691", f"账号或密码错误，请核对后重试（错误详情：{error_detail}）"
-                elif 'disabled' in error_detail.lower() or 'deregistered' in error_detail.lower():
-                    return "691", f"账号已被停用或注销，请联系运营商（错误详情：{error_detail}）"
-                elif 'expired' in error_detail.lower():
-                    return "691", f"账号已过期，请联系运营商（错误详情：{error_detail}）"
-                elif 'locked' in error_detail.lower():
-                    return "691", f"账号已被锁定，请联系运营商（错误详情：{error_detail}）"
-                else:
-                    return "691", f"账号或密码错误，请核对后重试（错误详情：{error_detail}）"
-            return "691", "账号或密码错误，请核对后重试"
-        
-        # 默认返回未获取到IP地址
-        return "815", "连接失败，未获取到IP地址"
-    except Exception as e:
-        logger.error(f"检测PPPOE错误失败: {e}")
-        return "815", "连接失败，未获取到IP地址"
 
 
 @app.route('/')
@@ -278,31 +116,19 @@ def activate():
                 for iface in NETWORK_INTERFACES:
                     if f"pppd" in line and iface in line:
                         used_interfaces.add(iface)
-            
-            logger.info(f"正在使用的网卡: {list(used_interfaces)}")
-            logger.info(f"配置的网卡: {NETWORK_INTERFACES}")
-            
-            # 查找空闲且有物理连接的网卡
+
+            # 查找空闲网卡
             available_iface = None
             for iface in NETWORK_INTERFACES:
                 if iface not in used_interfaces:
-                    # 检查网卡是否有物理连接
-                    carrier = check_interface_carrier(iface)
-                    logger.info(f"网卡 {iface} carrier状态: {carrier}")
-                    if carrier:
-                        available_iface = iface
-                        break
-                    else:
-                        logger.warning(f"网卡 {iface} 没有物理连接，跳过")
-            
-            logger.info(f"找到的空闲网卡: {available_iface}")
+                    available_iface = iface
+                    break
 
             if not available_iface:
                 log_data["success"] = False
                 log_data["error_code"] = "998"
                 log_data["error_message"] = "系统忙，请稍后再试！"
                 log_activation(log_data)
-                logger.error(f"没有可用的网卡")
                 return jsonify({
                     "success": False,
                     "error_code": "998",
@@ -343,39 +169,6 @@ def activate():
 
     # === 锁外执行拨号（避免长时间持有锁）===
 
-    # 根据ISP类型添加后缀（系统只负责添加尾缀，密码由用户手动输入）
-    # 校园网：输入学号 → 系统添加 @cdu 后缀
-    # 移动：输入纯数字手机号 → 系统添加 @cmccgx 后缀；修改过密码输入 scxy + 手机号 → 系统添加 @cmccgx 后缀
-    # 电信：输入纯数字手机号 → 系统添加 @96301 后缀
-    # 联通：输入纯数字手机号 → 系统添加 @10010 后缀
-    if '@' not in username:
-        # 检查是否为纯数字
-        if username.isdigit():
-            # 根据ISP类型添加后缀
-            if isp == 'cmccgx':
-                # 移动用户
-                username = f"{username}@cmccgx"
-                logger.info(f"移动用户，添加@cmccgx后缀: {username}")
-            elif isp == '96301':
-                # 电信用户
-                username = f"{username}@96301"
-                logger.info(f"电信用户，添加@96301后缀: {username}")
-            elif isp == '10010':
-                # 联通用户
-                username = f"{username}@10010"
-                logger.info(f"联通用户，添加@10010后缀: {username}")
-            else:
-                # 校园网用户（默认）
-                username = f"{username}@cdu"
-                logger.info(f"校园网用户，添加@cdu后缀: {username}")
-        elif username.startswith('scxy'):
-            # 修改过密码的移动用户，添加@cmccgx后缀
-            username = f"{username}@cmccgx"
-            logger.info(f"修改过密码的移动用户，添加@cmccgx后缀: {username}")
-        
-        # 更新日志记录为完整账号（在调用log_activation之前）
-        log_data["username"] = username
-
     ppp_cmd = [
         'sudo', 'pppd',
         'plugin', 'rp-pppoe.so', iface,
@@ -410,11 +203,10 @@ def activate():
     ppp_interface = None  # 记录实际使用的 ppp 接口名
     for _ in range(20):
         time.sleep(1)
-        # 读取日志，找 "Using interface pppX" 和各种错误
+        # 读取日志，找 "Using interface pppX"
         try:
             with open(log_file, 'r', encoding='utf-8') as f:
                 content = f.read()
-                # 检查是否获取到IP
                 match = re.search(r'Using interface (ppp\d+)', content)
                 if match:
                     ppp_interface = match.group(1)
@@ -430,17 +222,14 @@ def activate():
             proc.wait(timeout=3)
         except:
             pass
-        # 检测错误类型
-        error_code, error_message = detect_pppoe_error(log_file)
-        logger.info(f"检测到错误: {error_code} - {error_message}")
         log_data["success"] = False
-        log_data["error_code"] = error_code
-        log_data["error_message"] = error_message
+        log_data["error_code"] = "815"
+        log_data["error_message"] = "连接失败，未获取到IP地址"
         log_activation(log_data)
         return jsonify({
             "success": False,
-            "error_code": error_code,
-            "error_message": error_message,
+            "error_code": "815",
+            "error_message": "连接失败，未获取到IP地址",
             "username": username,
             "iface": iface,
             "mac": new_mac
@@ -544,7 +333,7 @@ def get_available_interfaces():
         
         return sorted(interfaces, key=lambda x: x['name'])
     except Exception as e:
-        logger.error(f"获取网卡列表失败: {e}")
+        print(f"获取网卡列表失败: {e}")
         return []
 
 
@@ -658,9 +447,9 @@ INSTANCE_PATH={data.get('instance_path', './instance')}
     try:
         result = subprocess.run(['docker', 'restart', 'pppoe-activation'], 
                               capture_output=True, text=True, timeout=10)
-        logger.info(f"主应用容器重启命令已执行: {result.stdout}")
+        print(f"主应用容器重启命令已执行: {result.stdout}")
     except Exception as e:
-        logger.error(f"重启主应用容器失败: {e}")
+        print(f"重启主应用容器失败: {e}")
 
     return True
 
@@ -707,45 +496,6 @@ def restart_status():
         return jsonify({'status': status})
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)})
-
-
-@app.route('/api/dial-logs')
-def api_dial_logs():
-    """获取最新的详细拨号日志（无需登录）"""
-    try:
-        # 查找最新的pppoe日志文件
-        log_dir = PPP_LOG_DIR
-        if not os.path.exists(log_dir):
-            return jsonify({"error": "日志目录不存在"}), 404
-        
-        # 获取所有pppoe日志文件，按修改时间排序
-        log_files = []
-        for filename in os.listdir(log_dir):
-            if filename.startswith('pppoe_') and filename.endswith('.log'):
-                filepath = os.path.join(log_dir, filename)
-                mtime = os.path.getmtime(filepath)
-                log_files.append((mtime, filepath))
-        
-        if not log_files:
-            return jsonify({"error": "暂无拨号日志"}), 404
-        
-        # 按修改时间倒序排序，取最新的
-        log_files.sort(reverse=True, key=lambda x: x[0])
-        latest_log_file = log_files[0][1]
-        
-        # 读取日志文件内容
-        with open(latest_log_file, 'r', encoding='utf-8') as f:
-            log_content = f.read()
-        
-        # 返回日志内容
-        return jsonify({
-            "success": True,
-            "log_file": os.path.basename(latest_log_file),
-            "log_content": log_content
-        })
-    except Exception as e:
-        logger.error(f"获取拨号日志失败: {e}")
-        return jsonify({"error": f'获取拨号日志失败: {str(e)}'}), 500
 
 
 @app.route('/save', methods=['POST'])
