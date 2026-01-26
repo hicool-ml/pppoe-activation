@@ -319,7 +319,7 @@ def activate():
     # 电信：输入纯数字手机号 → 系统添加 @96301 后缀
     # 联通：输入纯数字手机号 → 系统添加 @10010 后缀
     if '@' not in username:
-        # 检查是否为纯数字
+        # 检查是否为纯数字或学号（可能包含字母）
         if username.isdigit():
             # 根据ISP类型添加后缀
             if isp == 'cmccgx':
@@ -342,6 +342,21 @@ def activate():
             # 修改过密码的移动用户，添加@cmccgx后缀
             username = f"{username}@cmccgx"
             logger.info(f"修改过密码的移动用户，添加@cmccgx后缀: {username}")
+        else:
+            # 用户名包含字母但不是 scxy 开头，可能是学号或其他格式，根据ISP添加后缀
+            if isp == 'cmccgx':
+                username = f"{username}@cmccgx"
+                logger.info(f"移动用户，添加@cmccgx后缀: {username}")
+            elif isp == '96301':
+                username = f"{username}@96301"
+                logger.info(f"电信用户，添加@96301后缀: {username}")
+            elif isp == '10010':
+                username = f"{username}@10010"
+                logger.info(f"联通用户，添加@10010后缀: {username}")
+            else:
+                # 校园网用户（默认）
+                username = f"{username}@cdu"
+                logger.info(f"校园网用户，添加@cdu后缀: {username}")
         
         # 更新日志记录为完整账号
         log_data["username"] = username
