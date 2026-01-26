@@ -109,6 +109,12 @@
     .btn-primary:active {
       transform: translateY(0);
     }
+    .btn-primary:disabled {
+      background: #cccccc;
+      cursor: not-allowed;
+      opacity: 0.6;
+      transform: none;
+    }
     .result-box {
       margin-top: 30px;
       padding: 20px;
@@ -401,6 +407,14 @@
     // 表单提交
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
+      
+      // 获取提交按钮
+      const submitBtn = form.querySelector('button[type="submit"]');
+      
+      // 锁定按钮
+      submitBtn.disabled = true;
+      submitBtn.textContent = "激活中...";
+      
       resultBox.classList.remove('hidden');
       resultContent.innerHTML = "<p class='info-text'>正在激活，请稍候...</p>";
       
@@ -414,6 +428,9 @@
       
       if (!data.isp) {
         resultContent.innerHTML = "<p class='error'>❌ 请选择运营商</p>";
+        // 恢复按钮
+        submitBtn.disabled = false;
+        submitBtn.textContent = "激活账号";
         return;
       }
       
@@ -456,6 +473,10 @@
         logBox.textContent = resp.log || "无日志信息";
       } catch (err) {
         resultContent.innerHTML = "<p class='error'>请求失败，请检查网络连接</p>";
+      } finally {
+        // 恢复按钮
+        submitBtn.disabled = false;
+        submitBtn.textContent = "激活账号";
       }
     });
     
