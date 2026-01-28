@@ -1,0 +1,102 @@
+# Python 缓存和编译文件
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# 虚拟环境
+venv/
+env/
+ENV/
+.venv/
+
+# Python 包
+*.egg-info/
+dist/
+build/
+*.egg
+
+# 日志和数据库（这些应该通过外部挂载，不打包进镜像）
+logs/
+*.log
+*.db
+*.db.*
+*.sqlite
+*.sqlite3
+activation_log.jsonl*
+activation.lock
+
+# 备份文件
+*.bak
+*.BAD_*
+*.EMPTY_BACKUP_*
+*.tar
+*.tar.gz
+*.md5
+*.sha256
+*.app
+
+# 调试文件和临时文件
+temp/
+instance/
+ppp/
+tmp/
+*.tmp
+
+# Node.js
+node_modules/
+package-lock.json
+index.mjs
+.env
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# IDE 和编辑器
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+*.sublime-*
+
+# Docker 相关
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# 文档和说明
+README.md
+*.md
+LICENSE
+
+# 测试和覆盖率
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# 开发和调试脚本（不应该打包进镜像）
+app_v3.py
+app_v2.app
+clean_invalid.py
+clean_logs_by_schema.py
+fix_db_time.py
+import_activation_logs.py
+import_logs.py
+import_offset.txt
+configure.sh
+install_deps.sh
+install_services.sh
+install.sh
+setup.sh
+package.sh
+pip.conf
+
+# 其他
+*.pid
+*.sock

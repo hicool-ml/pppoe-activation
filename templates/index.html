@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PPPoE账号激活</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    }
+    .activation-card {
+      background: white;
+      border-radius: 20px;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+      padding: 40px;
+      max-width: 500px;
+      width: 100%;
+    }
+    @media (max-width: 576px) {
+      .activation-card {
+        padding: 25px;
+        border-radius: 15px;
+        box-shadow: 0 5px 20px rgba(0, 0, 0, 0.1);
+      }
+      body {
+        padding: 15px;
+      }
+    }
+    .activation-card h1 {
+      color: #333;
+      font-size: 28px;
+      font-weight: bold;
+      text-align: center;
+      margin-bottom: 30px;
+    }
+    @media (max-width: 576px) {
+      .activation-card h1 {
+        font-size: 24px;
+        margin-bottom: 25px;
+      }
+    }
+    .form-group {
+      margin-bottom: 20px;
+    }
+    .form-group label {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: 500;
+      color: #555;
+    }
+    .form-control {
+      width: 100%;
+      padding: 12px 15px;
+      border: 2px solid #e0e0e0;
+      border-radius: 10px;
+      font-size: 14px;
+      transition: border-color 0.3s;
+      height: 44px;
+      box-sizing: border-box;
+    }
+    @media (max-width: 576px) {
+      .form-control {
+        padding: 12px 15px;
+        font-size: 16px;
+        height: 48px;
+      }
+    }
+    .form-control:focus {
+      border-color: #667eea;
+      outline: none;
+      box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+    }
+    .btn-primary {
+      width: 100%;
+      padding: 12px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      border-radius: 10px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.2s, box-shadow 0.2s;
+      height: 44px;
+      box-sizing: border-box;
+    }
+    @media (max-width: 576px) {
+      .btn-primary {
+        padding: 14px;
+        font-size: 18px;
+        height: 48px;
+      }
+    }
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 5px 15px rgba(102, 126, 234, 0.3);
+    }
+    .btn-primary:active {
+      transform: translateY(0);
+    }
+    .btn-primary:disabled {
+      background: #cccccc;
+      cursor: not-allowed;
+      opacity: 0.6;
+      transform: none;
+    }
+    .result-box {
+      margin-top: 30px;
+      padding: 20px;
+      border-radius: 10px;
+      background: #f8f9fa;
+    }
+    @media (max-width: 576px) {
+      .result-box {
+        padding: 15px;
+        margin-top: 25px;
+      }
+    }
+    .result-box h2 {
+      font-size: 18px;
+      font-weight: bold;
+      margin-bottom: 15px;
+    }
+    @media (max-width: 576px) {
+      .result-box h2 {
+        font-size: 16px;
+        margin-bottom: 12px;
+      }
+    }
+    .success {
+      color: #28a745;
+      font-weight: 600;
+    }
+    .error {
+      color: #dc3545;
+      font-weight: 600;
+    }
+    .info-text {
+      font-size: 13px;
+      margin-top: 5px;
+      color: #666;
+    }
+    @media (max-width: 576px) {
+      .info-text {
+        font-size: 14px;
+      }
+    }
+    .password-toggle {
+      position: absolute;
+      right: 15px;
+      top: 50%;
+      transform: translateY(-50%);
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 20px;
+    }
+    .hidden {
+      display: none !important;
+    }
+    .radio-group {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+    }
+    .radio-group label {
+      display: flex;
+      align-items: center;
+      margin: 0;
+      font-weight: normal;
+    }
+    .radio-group input[type="radio"] {
+      margin-right: 8px;
+    }
+    .toggle-log {
+      color: #667eea;
+      text-decoration: underline;
+      cursor: pointer;
+      font-size: 14px;
+      margin-top: 10px;
+      background: none;
+      border: none;
+      padding: 0;
+    }
+    .toggle-log:hover {
+      color: #764ba2;
+    }
+    .log-box {
+      margin-top: 15px;
+      padding: 15px;
+      background: #f0f0f0;
+      border-radius: 8px;
+      font-size: 12px;
+      overflow-x: auto;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+      max-height: 400px;
+      overflow-y: auto;
+    }
+    .log-loading {
+      text-align: center;
+      padding: 20px;
+      color: #667eea;
+      font-weight: 500;
+    }
+  </style>
+</head>
+<body>
+  <div class="activation-card">
+    <h1>PPPoE账号激活</h1>
+    
+    <!-- 输入表单 -->
+    <form id="pppoeForm">
+      <!-- 姓名 -->
+      <div class="form-group">
+        <label>姓名</label>
+        <input type="text" id="name" class="form-control" placeholder="请输入姓名" required>
+      </div>
+      
+      <!-- 职业 -->
+      <div class="form-group">
+        <label>职业</label>
+        <select id="role" class="form-control" required>
+          <option value="">请选择</option>
+          <option value="学生">学生</option>
+          <option value="教职工">教职工</option>
+          <option value="外包">外包</option>
+        </select>
+      </div>
+      
+      <!-- ISP选择 -->
+      <div class="form-group">
+        <label>运营商</label>
+        <select id="isp" class="form-control" required>
+          <option value="">请选择</option>
+          <option value="cdu">校园网（学工号）</option>
+          <option value="cmccgx">移动（手机号）</option>
+          <option value="96301">电信（手机号）</option>
+          <option value="10010">联通（手机号）</option>
+        </select>
+      </div>
+      
+      <!-- 移动专属选项 -->
+      <div id="cmccOptions" class="form-group hidden">
+        <label>移动账号类型</label>
+        <div class="radio-group">
+          <label>
+            <input type="radio" name="cmccType" value="normal" checked> 原始密码
+          </label>
+          <label>
+            <input type="radio" name="cmccType" value="scxy"> 修改过密码
+          </label>
+        </div>
+      </div>
+      
+      <!-- 账号 -->
+      <div class="form-group">
+        <label id="usernameLabel">账号</label>
+        <input type="text" id="username" class="form-control" placeholder="请输入账号" required>
+        <p id="accountPreview" class="info-text text-center font-semibold hidden" style="color: #667eea;"></p>
+      </div>
+      
+      <!-- 密码 + 显示按钮 -->
+      <div class="form-group">
+        <label>密码</label>
+        <div style="position: relative;">
+          <input type="password" id="password" class="form-control" placeholder="请输入密码" style="padding-right: 50px;">
+          <button type="button" id="togglePassword" class="password-toggle">
+            👁️
+          </button>
+        </div>
+        <p id="passwordHint" class="info-text" style="font-size: 12px;"></p>
+      </div>
+      
+      <button type="submit" class="btn-primary">激活账号</button>
+    </form>
+    
+    <!-- 结果显示 -->
+    <div id="resultBox" class="result-box hidden">
+      <h2>激活结果</h2>
+      <div id="resultContent"></div>
+      <button id="toggleLog" class="toggle-log">查看详细日志</button>
+      <pre id="logBox" class="log-box hidden"></pre>
+    </div>
+  </div>
+  
+  <script>
+    const ispSelect = document.getElementById('isp');
+    const cmccOptions = document.getElementById('cmccOptions');
+    const usernameInput = document.getElementById('username');
+    const usernameLabel = document.getElementById('usernameLabel');
+    const accountPreview = document.getElementById('accountPreview');
+    const passwordInput = document.getElementById('password');
+    const passwordHint = document.getElementById('passwordHint');
+    const togglePassword = document.getElementById('togglePassword');
+    const form = document.getElementById('pppoeForm');
+    const resultBox = document.getElementById('resultBox');
+    const resultContent = document.getElementById('resultContent');
+    const logBox = document.getElementById('logBox');
+    const toggleLog = document.getElementById('toggleLog');
+    const nameInput = document.getElementById('name');
+    const roleSelect = document.getElementById('role');
+    
+    const errorMessages = {
+      "629": "远程计算机强制关闭连接，请稍后再试",
+      "630": "连接失败，设备不可用，请检查本地网卡或线路",
+      "651": "调制解调器或网络设备错误，请检查宽带设备连接",
+      "678": "远程计算机无响应，可能是网络不可达或线路未接通",
+      "691": "账号或密码错误，请核对后重试",
+      "692": "硬件故障，请检查网卡或拨号设备",
+      "718": "PPP 协议超时，可能网络拥塞或服务器无响应",
+      "734": "PPP 链路控制协议终止，网络异常请稍后再试",
+      "769": "网络不可用，请检查本地连接",
+      "815": "服务器未响应，请联系运营商"
+    };
+    
+    // ISP切换
+    ispSelect.addEventListener('change', () => {
+      if (ispSelect.value === "cmccgx") {
+        cmccOptions.classList.remove('hidden');
+        usernameLabel.textContent = "手机号";
+        usernameInput.placeholder = "请输入手机号";
+      } else if (ispSelect.value === "cdu") {
+        cmccOptions.classList.add('hidden');
+        usernameLabel.textContent = "学工号";
+        usernameInput.placeholder = "请输入学工号";
+      } else {
+        cmccOptions.classList.add('hidden');
+        usernameLabel.textContent = "手机号";
+        usernameInput.placeholder = "请输入手机号";
+      }
+      updatePreview();
+      updatePasswordHint();
+    });
+    
+    togglePassword.addEventListener('click', () => {
+      if (passwordInput.type === "password") {
+        passwordInput.type = "text";
+        togglePassword.textContent = "🙈";
+      } else {
+        passwordInput.type = "password";
+        togglePassword.textContent = "👁️";
+      }
+    });
+    
+    function updatePreview() {
+      let baseUser = usernameInput.value.trim();
+      const isp = ispSelect.value;
+      
+      if (!baseUser || !isp) {
+        accountPreview.classList.add('hidden');
+        return;
+      }
+      
+      if (isp === "cmccgx") {
+        const cmccType = document.querySelector('input[name="cmccType"]:checked')?.value;
+        if (cmccType === "scxy") {
+          baseUser = "scxy" + baseUser;
+        }
+      }
+      
+      const finalUsername = baseUser + "@" + isp;
+      accountPreview.textContent = "完整账号：" + finalUsername;
+      accountPreview.classList.remove('hidden');
+    }
+    
+    function updatePasswordHint() {
+      const isp = ispSelect.value;
+      const baseUser = usernameInput.value.trim();
+      passwordInput.value = "";
+      passwordHint.textContent = "";
+      
+      if (!isp) return;
+      
+      if (isp === "cdu") {
+        passwordHint.textContent = "请输入统一身份认证密码";
+      } else if (isp === "cmccgx") {
+        const cmccType = document.querySelector('input[name="cmccType"]:checked')?.value;
+        if (cmccType === "normal") {
+          if (baseUser.length >= 6) passwordInput.value = baseUser.slice(-6);
+          passwordHint.textContent = "默认密码为手机号后6位，如已修改请填写正确密码";
+        } else {
+          passwordHint.textContent = "请输入新密码";
+        }
+      } else if (isp === "96301") {
+        if (baseUser.length >= 8) passwordInput.value = baseUser.slice(-8);
+        passwordHint.textContent = "默认密码为手机号后8位，如已修改请填写正确密码";
+      } else if (isp === "10010") {
+        passwordHint.textContent = "默认密码为身份证后6位，如已修改请填写正确密码";
+      }
+    }
+    
+    usernameInput.addEventListener('input', () => { updatePreview(); updatePasswordHint(); });
+    document.querySelectorAll('input[name="cmccType"]').forEach(el => el.addEventListener('change', () => { updatePreview(); updatePasswordHint(); }));
+    
+    // 表单提交
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      
+      // 获取提交按钮
+      const submitBtn = form.querySelector('button[type="submit"]');
+      
+      // 锁定按钮
+      submitBtn.disabled = true;
+      submitBtn.textContent = "激活中...";
+      
+      resultBox.classList.remove('hidden');
+      resultContent.innerHTML = "<p class='info-text'>正在激活，请稍候...</p>";
+      
+      const data = {
+        username: usernameInput.value.trim(),
+        password: passwordInput.value,
+        name: nameInput.value.trim(),
+        role: roleSelect.value,
+        isp: ispSelect.value
+      };
+      
+      if (!data.isp) {
+        resultContent.innerHTML = "<p class='error'>❌ 请选择运营商</p>";
+        // 恢复按钮
+        submitBtn.disabled = false;
+        submitBtn.textContent = "激活账号";
+        return;
+      }
+      
+      if (data.isp === "cmccgx") {
+        const cmccType = document.querySelector('input[name="cmccType"]:checked').value;
+        if (cmccType === "scxy") data.username = "scxy" + data.username;
+      }
+      
+      const finalUsername = data.username + "@" + data.isp;
+      data.username = finalUsername;
+      
+      try {
+        const res = await fetch('/activate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
+        });
+        const resp = await res.json();
+        
+        if (resp.success) {
+          resultContent.innerHTML = `
+            <p class="success">✅ 激活成功</p>
+            <p class="info-text">账号：${resp.username}</p>
+            <p class="info-text">使用接口：${resp.iface}</p>
+            <p class="info-text">MAC：${resp.mac}</p>
+            <p class="info-text">IP：${resp.ip || '无'}</p>
+          `;
+        } else {
+          // 优先使用后端返回的详细错误消息，如果没有则使用错误码映射
+          const userTip = resp.error_message || errorMessages[resp.error_code] || "未知错误";
+          resultContent.innerHTML = `
+            <p class="error">❌ 激活失败</p>
+            <p class="info-text">错误码：${resp.error_code}</p>
+            <p class="info-text">提示：${userTip}</p>
+            <p class="info-text">账号：${resp.username}</p>
+            <p class="info-text">使用接口：${resp.iface}</p>
+          `;
+        }
+        
+        logBox.textContent = resp.log || "无日志信息";
+      } catch (err) {
+        resultContent.innerHTML = "<p class='error'>请求失败，请检查网络连接</p>";
+      } finally {
+        // 恢复按钮
+        submitBtn.disabled = false;
+        submitBtn.textContent = "激活账号";
+      }
+    });
+    
+    // 查看详细日志
+    toggleLog.addEventListener('click', async () => {
+      if (logBox.classList.contains('hidden')) {
+        logBox.classList.remove('hidden');
+        logBox.innerHTML = "<p class='log-loading'>正在加载日志...</p>";
+        
+        try {
+          const res = await fetch('/api/dial-logs');
+          if (res.ok) {
+            const data = await res.json();
+            if (data.success && data.log_content) {
+              logBox.textContent = `【日志文件：${data.log_file}】\n\n${data.log_content}`;
+            } else {
+              logBox.textContent = data.error || "暂无日志记录";
+            }
+          } else {
+            logBox.textContent = "加载日志失败";
+          }
+        } catch (err) {
+          logBox.textContent = "加载日志失败";
+        }
+      } else {
+        logBox.classList.add('hidden');
+      }
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,48 @@
+# PPPOE 激活系统 - 精简版依赖
+# 移除了数据可视化库（matplotlib, numpy, pandas, seaborn, pillow）
+# 如果需要图表功能，请使用完整版 requirements.txt
+
+# Web 框架
+Flask==3.1.2
+Werkzeug==3.1.3
+Jinja2==3.1.6
+MarkupSafe==3.0.2
+itsdangerous==2.2.0
+click==8.2.1
+blinker==1.9.0
+
+# 数据库
+Flask-SQLAlchemy==3.1.1
+SQLAlchemy==2.0.43
+Flask-Migrate==4.1.0
+Alembic==1.16.5
+Mako==1.3.10
+
+# 用户认证
+Flask-Login==0.6.3
+bcrypt==4.3.0
+
+# 表单处理
+Flask-WTF==1.2.2
+WTForms==3.2.1
+
+# 前端模板
+Flask-Bootstrap==3.3.7.1
+dominate==2.9.1
+
+# 日期时间处理
+python-dateutil==2.9.0.post0
+pytz==2025.2
+tzdata==2025.2
+
+# 其他工具
+six==1.17.0
+packaging==25.0
+pyparsing==3.2.4
+typing_extensions==4.15.0
+greenlet==3.2.4
+distlib==0.4.0
+filelock==3.19.1
+platformdirs==4.4.0
+virtualenv==20.34.0
+visitor==0.1.3
