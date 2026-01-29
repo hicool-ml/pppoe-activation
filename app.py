@@ -28,7 +28,9 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base.metadata.create_all(bind=engine)
 
 LOG_FILE = os.path.join(BASE_DIR, 'activation_log.jsonl')
-LOCK_FILE = os.path.join(BASE_DIR, 'activation.lock')  # 全局锁文件
+# 锁目录，用于存储每个网卡的锁文件
+LOCK_DIR = os.path.join(BASE_DIR, 'locks')
+os.makedirs(LOCK_DIR, exist_ok=True)
 CONFIG_FILE = '/opt/pppoe-activation/config.py'
 ENV_FILE = '/opt/pppoe-activation/.env'
 INIT_FLAG_FILE = '/opt/pppoe-activation/.initialized'
@@ -116,8 +118,12 @@ def set_interface_mac(iface, mac):
 
 def clear_ppp_interface(iface):
     """清理已存在的 pppd 进程"""
-    subprocess.run(f"sudo pkill -f 'pppd.*{iface}'", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    # 先尝试优雅终止
+    subprocess.run(['sudo', 'pkill', '-f', f'pppd.*{iface}'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
     time.sleep(1)
+    # 强制杀死残留
+    subprocess.run(['sudo', 'pkill', '-9', '-f', f'pppd.*{iface}'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+    time.sleep(0.5)
 
 
 def get_ip_from_interface(iface):
@@ -177,13 +183,34 @@ def detect_pppoe_error(log_file):
                     return "691", f"账号或密码错误，请核对后重试（错误详情：{error_detail}）"
             return "691", "账号或密码错误，请核对后重试"
         
+        # 检查CHAP认证失败（使用错误码646）
+        if 'CHAP authentication failed' in content or 'CHAP AuthNak' in content:
+            # 尝试提取详细错误信息
+            auth_nak_match = re.search(r'AuthNak.*?"([^"]+)"', content)
+            if auth_nak_match:
+                error_detail = auth_nak_match.group(1)
+                # 解析常见的错误信息
+                if 'concurrency' in error_detail.lower():
+                    return "646", f"账号已在其他地方登录，请等待几分钟后重试（错误详情：{error_detail}）"
+                elif 'password' in error_detail.lower() or 'incorrect' in error_detail.lower():
+                    return "646", f"账号或密码错误，请核对后重试（错误详情：{error_detail}）"
+                elif 'disabled' in error_detail.lower() or 'deregistered' in error_detail.lower():
+                    return "646", f"账号已被停用或注销，请联系运营商（错误详情：{error_detail}）"
+                elif 'expired' in error_detail.lower():
+                    return "646", f"账号已过期，请联系运营商（错误详情：{error_detail}）"
+                elif 'locked' in error_detail.lower():
+                    return "646", f"账号已被锁定，请联系运营商（错误详情：{error_detail}）"
+                else:
+                    return "646", f"账号或密码错误，请核对后重试（错误详情：{error_detail}）"
+            return "646", "账号或密码错误，请核对后重试"
+        
         # 检查PPPOE Discovery失败（无法找到BRAS）
         if 'Timeout waiting for PADO packets' in content or 'Unable to complete PPPoE Discovery' in content:
             return "678", "远程计算机无响应，可能是网络不可达或线路未接通"
         
-        # 检查LCP协商失败
+        # 检查LCP协商失败（MTU/MRU不匹配）
         if 'LCP terminated by peer' in content:
-            return "734", "PPP链路控制协议终止，网络异常请稍后再试"
+            return "734", "PPP链路控制协议终止，可能是MTU/MRU不匹配，网络异常请稍后再试"
         
         # 检查PPP协议超时
         if 'LCP timeout' in content or ('LCP EchoReq' in content and 'LCP EchoRep' not in content):
@@ -197,26 +224,25 @@ def detect_pppoe_error(log_file):
         if 'Send PPPoE Discovery' in content and 'Recv PPPoE Discovery' not in content:
             return "630", "连接失败，设备不可用，请检查本地网卡或线路"
         
-        # 检查CHAP认证失败
-        if 'CHAP authentication failed' in content or 'CHAP AuthNak' in content:
-            # 尝试提取详细错误信息
-            auth_nak_match = re.search(r'AuthNak.*?"([^"]+)"', content)
-            if auth_nak_match:
-                error_detail = auth_nak_match.group(1)
-                # 解析常见的错误信息
-                if 'concurrency' in error_detail.lower():
-                    return "691", f"账号已在其他地方登录，请等待几分钟后重试（错误详情：{error_detail}）"
-                elif 'password' in error_detail.lower() or 'incorrect' in error_detail.lower():
-                    return "691", f"账号或密码错误，请核对后重试（错误详情：{error_detail}）"
-                elif 'disabled' in error_detail.lower() or 'deregistered' in error_detail.lower():
-                    return "691", f"账号已被停用或注销，请联系运营商（错误详情：{error_detail}）"
-                elif 'expired' in error_detail.lower():
-                    return "691", f"账号已过期，请联系运营商（错误详情：{error_detail}）"
-                elif 'locked' in error_detail.lower():
-                    return "691", f"账号已被锁定，请联系运营商（错误详情：{error_detail}）"
-                else:
-                    return "691", f"账号或密码错误，请核对后重试（错误详情：{error_detail}）"
-            return "691", "账号或密码错误，请核对后重试"
+        # 检查认证协议协商失败
+        if 'Authentication failed' in content and 'CHAP' not in content and 'PAP' not in content:
+            return "691", "认证失败，请检查账号和密码"
+        
+        # 检查IPCP协商失败
+        if 'IPCP' in content and ('failed' in content or 'terminated' in content):
+            return "734", "IPCP协商失败，可能是IP地址分配问题"
+        
+        # 检查物理连接问题
+        if 'No carrier' in content or 'Link down' in content:
+            return "630", "物理连接断开，请检查网线或网络设备"
+        
+        # 检查MAC地址冲突
+        if 'MAC address' in content and ('conflict' in content.lower() or 'duplicate' in content.lower()):
+            return "630", "MAC地址冲突，请稍后重试"
+        
+        # 检查服务器拒绝连接
+        if 'Server refused' in content or 'Access denied' in content:
+            return "691", "服务器拒绝连接，请检查账号状态"
         
         # 默认返回未获取到IP地址
         return "815", "连接失败，未获取到IP地址"
@@ -267,79 +293,101 @@ def activate():
     log_data["error_code"] = None
     log_data["error_message"] = None
 
-    # 打开锁文件，用于进程间同步
-    with open(LOCK_FILE, 'w') as lock_fd:
-        try:
-            fcntl.flock(lock_fd.fileno(), fcntl.LOCK_EX)  # 排他锁
+    # 为每个网卡创建单独的锁文件（实现网卡级别的并发）
+    def acquire_iface_lock(iface):
+        """获取网卡的锁文件描述符"""
+        lock_path = os.path.join(LOCK_DIR, f'{iface}.lock')
+        fd = open(lock_path, 'w')
+        fcntl.flock(fd.fileno(), fcntl.LOCK_EX)
+        return fd
+    
+    def release_iface_lock(lock_fd):
+        """释放网卡的锁"""
+        fcntl.flock(lock_fd.fileno(), fcntl.LOCK_UN)
+        lock_fd.close()
+    
+    # 兼容性：如果 LOCK_DIR 不存在，创建锁目录
+    try:
+        os.makedirs(LOCK_DIR, exist_ok=True)
+    except:
+        pass
+    
+    # 检查当前正在使用的网卡
+    used_interfaces = set()
+    for line in os.popen("ps aux | grep pppd").readlines():
+        for iface in NETWORK_INTERFACES:
+            if f"pppd" in line and iface in line:
+                used_interfaces.add(iface)
+    
+    logger.info(f"正在使用的网卡: {list(used_interfaces)}")
+    logger.info(f"配置的网卡: {NETWORK_INTERFACES}")
+    
+    # 查找空闲且有物理连接的网卡
+    available_iface = None
+    for iface in NETWORK_INTERFACES:
+        if iface not in used_interfaces:
+            # 检查网卡是否有物理连接
+            carrier = check_interface_carrier(iface)
+            logger.info(f"网卡 {iface} carrier状态: {carrier}")
+            if carrier:
+                available_iface = iface
+                break
+            else:
+                logger.warning(f"网卡 {iface} 没有物理连接，跳过")
+    
+    logger.info(f"找到的空闲网卡: {available_iface}")
 
-            # 检查当前正在使用的网卡
-            used_interfaces = set()
-            for line in os.popen("ps aux | grep pppd").readlines():
-                for iface in NETWORK_INTERFACES:
-                    if f"pppd" in line and iface in line:
-                        used_interfaces.add(iface)
-            
-            logger.info(f"正在使用的网卡: {list(used_interfaces)}")
-            logger.info(f"配置的网卡: {NETWORK_INTERFACES}")
-            
-            # 查找空闲且有物理连接的网卡
-            available_iface = None
-            for iface in NETWORK_INTERFACES:
-                if iface not in used_interfaces:
-                    # 检查网卡是否有物理连接
-                    carrier = check_interface_carrier(iface)
-                    logger.info(f"网卡 {iface} carrier状态: {carrier}")
-                    if carrier:
-                        available_iface = iface
-                        break
-                    else:
-                        logger.warning(f"网卡 {iface} 没有物理连接，跳过")
-            
-            logger.info(f"找到的空闲网卡: {available_iface}")
+    if not available_iface:
+        log_data["success"] = False
+        log_data["error_code"] = "998"
+        log_data["error_message"] = "系统忙，请稍后再试！"
+        log_activation(log_data)
+        logger.error(f"没有可用的网卡")
+        return jsonify({
+            "success": False,
+            "error_code": "998",
+            "error_message": "系统忙，请稍后再试！",
+            "username": username,
+            "iface": "none"
+        })
 
-            if not available_iface:
-                log_data["success"] = False
-                log_data["error_code"] = "998"
-                log_data["error_message"] = "系统忙，请稍后再试！"
-                log_activation(log_data)
-                logger.error(f"没有可用的网卡")
-                return jsonify({
-                    "success": False,
-                    "error_code": "998",
-                    "error_message": "系统忙，请稍后再试！",
-                    "username": username,
-                    "iface": "none"
-                })
+    iface = available_iface
+    
+    # 获取网卡级别锁（只锁定该网卡，不影响其他网卡）
+    lock_fd = acquire_iface_lock(iface)
+    
+    try:
+        timestamp = int(time.time())
+        log_file = os.path.join(PPP_LOG_DIR, f"pppoe_{timestamp}_{iface}.log")
+        open(log_file, 'w').close()
 
-            iface = available_iface
-            timestamp = int(time.time())
-            log_file = os.path.join(PPP_LOG_DIR, f"pppoe_{timestamp}_{iface}.log")
-            open(log_file, 'w').close()
+        # 清理旧连接（在锁内执行，防止并发冲突）
+        clear_ppp_interface(iface)
 
-            # 清理旧连接（在锁内执行，防止并发冲突）
-            clear_ppp_interface(iface)
-
-            # 更改 MAC
-            new_mac = random_mac()
-            if not set_interface_mac(iface, new_mac):
-                log_data["success"] = False
-                log_data["mac"] = new_mac
-                log_data["error_code"] = "MAC_FAIL"
-                log_data["error_message"] = "MAC地址设置失败"
-                log_activation(log_data)
-                return jsonify({
-                    "success": False,
-                    "error_code": "MAC_FAIL",
-                    "error_message": "MAC地址设置失败",
-                    "username": username,
-                    "iface": iface
-                })
-
-            # 保存 MAC 到日志
+        # 更改 MAC
+        new_mac = random_mac()
+        if not set_interface_mac(iface, new_mac):
+            log_data["success"] = False
             log_data["mac"] = new_mac
+            log_data["error_code"] = "MAC_FAIL"
+            log_data["error_message"] = "MAC地址设置失败"
+            log_activation(log_data)
+            return jsonify({
+                "success": False,
+                "error_code": "MAC_FAIL",
+                "error_message": "MAC地址设置失败",
+                "username": username,
+                "iface": iface
+            })
 
-        finally:
-            fcntl.flock(lock_fd.fileno(), fcntl.LOCK_UN)  # 释放锁
+        # 等待 MAC 生效（某些网卡需要 100-300ms）
+        time.sleep(0.3)
+
+        # 保存 MAC 到日志
+        log_data["mac"] = new_mac
+
+    finally:
+        release_iface_lock(lock_fd)  # 释放网卡锁
 
     # === 锁外执行拨号（避免长时间持有锁）===
 
@@ -425,11 +473,21 @@ def activate():
             continue
 
     if not ip:
+        # 优雅终止 pppd 进程
         proc.terminate()
         try:
             proc.wait(timeout=3)
-        except:
-            pass
+        except subprocess.TimeoutExpired:
+            # 如果优雅终止失败，强制终止
+            proc.kill()
+            try:
+                proc.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                # 如果强制终止也失败，使用 pkill -9 -P 作为后备方案
+                logger.warning(f"无法正常终止 pppd 进程 (PID: {proc.pid})，使用 pkill -9 -P 强制终止")
+                subprocess.run(['sudo', 'pkill', '-9', '-P', str(proc.pid)], check=False)
+                time.sleep(1)
+        
         # 检测错误类型
         error_code, error_message = detect_pppoe_error(log_file)
         logger.info(f"检测到错误: {error_code} - {error_message}")
@@ -447,10 +505,22 @@ def activate():
         })
 
     # ✅ 成功获取IP，现在准备挂断
-    # 先尝试优雅终止 pppd 进程（通过网卡名）
-    subprocess.run(['sudo', 'pkill', '-f', f'pppd.*{iface}'], check=False)
-    time.sleep(1)
-    # 强制杀死残留
+    # 优雅终止 pppd 进程（使用记录的 PID）
+    proc.terminate()
+    try:
+        proc.wait(timeout=3)
+    except subprocess.TimeoutExpired:
+        # 如果优雅终止失败，强制终止
+        proc.kill()
+        try:
+            proc.wait(timeout=2)
+        except subprocess.TimeoutExpired:
+            # 如果强制终止也失败，使用 pkill -9 -P 作为后备方案
+            logger.warning(f"无法正常终止 pppd 进程 (PID: {proc.pid})，使用 pkill -9 -P 强制终止")
+            subprocess.run(['sudo', 'pkill', '-9', '-P', str(proc.pid)], check=False)
+            time.sleep(1)
+    
+    # 额外清理：确保没有残留的 pppd 进程（通过网卡名）
     subprocess.run(['sudo', 'pkill', '-9', '-f', f'pppd.*{iface}'], check=False)
     time.sleep(1)
 
@@ -820,6 +890,6 @@ def save():
 
 
 if __name__ == '__main__':
-    # 确保锁文件存在
-    open(LOCK_FILE, 'a').close()
+    # 确保锁目录存在
+    os.makedirs(LOCK_DIR, exist_ok=True)
     app.run(host='0.0.0.0', port=APP_PORT, threaded=True, debug=False)

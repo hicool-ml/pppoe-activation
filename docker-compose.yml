@@ -32,13 +32,12 @@ services:
     container_name: pppoe-activation
     hostname: pppoe-activation
     restart: unless-stopped
-    ports:
-      - "${APP_PORT:-80}:80"
-      - "${ADMIN_PORT:-8081}:8081"
+    # 使用 host 网络模式（PPPoE 拨号必须使用 host 网络模式）
+    network_mode: host
     environment:
       - TZ=${TZ:-Asia/Shanghai}
       - APP_PORT=${APP_PORT:-80}
-      - ADMIN_PORT=${ADMIN_PORT:-80}
+      - ADMIN_PORT=${ADMIN_PORT:-8081}
       - NETWORK_INTERFACES=${NETWORK_INTERFACES:-eth0 eth1 eth2 eth3}
     volumes:
       # 数据持久化 - 数据库
@@ -55,12 +54,11 @@ services:
 
       # 配置文件（可选，如果需要从宿主机修改配置）
       # - ${CONFIG_PATH:-./config.py}:/opt/pppoe-activation/config.py:ro
-    networks:
-      - pppoe-network
     cap_add:
       - NET_ADMIN
       - SYS_ADMIN
     devices:
+      - /dev/ppp
       - /dev/net/tun
     security_opt:
       - seccomp:unconfined
@@ -71,8 +69,6 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
-    depends_on:
-      - init-config
 
 networks:
   pppoe-network:
