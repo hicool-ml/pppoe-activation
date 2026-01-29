@@ -15,7 +15,7 @@ from sqlalchemy.orm import sessionmaker
 from models import ActivationLog, Base
 
 app = Flask(__name__, static_folder='static', template_folder='templates')
-app.secret_key = 'pppoe-activation-secret-key-change-in-production'
+app.secret_key = os.environ.get('SECRET_KEY', os.urandom(32))
 
 # 配置日志
 logging.basicConfig(level=logging.INFO, format='[%(levelname)s] %(message)s')
@@ -524,10 +524,6 @@ def activate():
             subprocess.run(['sudo', 'pkill', '-9', '-P', str(proc.pid)], check=False)
             time.sleep(1)
     
-    # 额外清理：确保没有残留的 pppd 进程（通过网卡名）
-    subprocess.run(['sudo', 'pkill', '-9', '-f', f'pppd.*{iface}'], check=False)
-    time.sleep(1)
-
     # ✅ 成功：补全所有字段
     log_data["success"] = True
     log_data["ip"] = ip
