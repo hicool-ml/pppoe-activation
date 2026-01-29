@@ -117,12 +117,12 @@ def set_interface_mac(iface, mac):
 
 
 def clear_ppp_interface(iface):
-    """清理已存在的 pppd 进程"""
-    # 先尝试优雅终止
-    subprocess.run(['sudo', 'pkill', '-f', f'pppd.*{iface}'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
-    time.sleep(1)
+    """清理已存在的 pppd 进程（只清理与指定网卡关联的 pppd，避免误杀他人会话）"""
+    # 先尝试优雅终止（只清理与指定网卡关联的 pppd）
+    subprocess.run(['sudo', 'pkill', '-f', f'pppd.*rp-pppoe.so {iface}'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+    time.sleep(0.5)
     # 强制杀死残留
-    subprocess.run(['sudo', 'pkill', '-9', '-f', f'pppd.*{iface}'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+    subprocess.run(['sudo', 'pkill', '-9', '-f', f'pppd.*rp-pppoe.so {iface}'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
     time.sleep(0.5)
 
 
@@ -312,32 +312,33 @@ def activate():
     except:
         pass
     
-    # 检查当前正在使用的网卡
-    used_interfaces = set()
-    for line in os.popen("ps aux | grep pppd").readlines():
-        for iface in NETWORK_INTERFACES:
-            if f"pppd" in line and iface in line:
-                used_interfaces.add(iface)
+    # 使用"锁即资源"的方式查找可用网卡（避免竞态窗口）
+    # 直接尝试获取锁，如果获取成功则该网卡可用
+    selected_iface = None
+    lock_fd = None
     
-    logger.info(f"正在使用的网卡: {list(used_interfaces)}")
-    logger.info(f"配置的网卡: {NETWORK_INTERFACES}")
-    
-    # 查找空闲且有物理连接的网卡
-    available_iface = None
     for iface in NETWORK_INTERFACES:
-        if iface not in used_interfaces:
-            # 检查网卡是否有物理连接
-            carrier = check_interface_carrier(iface)
-            logger.info(f"网卡 {iface} carrier状态: {carrier}")
-            if carrier:
-                available_iface = iface
-                break
-            else:
-                logger.warning(f"网卡 {iface} 没有物理连接，跳过")
+        # 检查网卡是否有物理连接
+        carrier = check_interface_carrier(iface)
+        logger.info(f"网卡 {iface} carrier状态: {carrier}")
+        if not carrier:
+            logger.warning(f"网卡 {iface} 没有物理连接，跳过")
+            continue
+        
+        # 尝试获取网卡锁（非阻塞模式）
+        try:
+            lock_path = os.path.join(LOCK_DIR, f'{iface}.lock')
+            fd = open(lock_path, 'w')
+            fcntl.flock(fd.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            lock_fd = fd
+            selected_iface = iface
+            logger.info(f"成功获取网卡 {iface} 的锁")
+            break
+        except (BlockingIOError, IOError):
+            logger.info(f"网卡 {iface} 已被锁定，跳过")
+            continue
     
-    logger.info(f"找到的空闲网卡: {available_iface}")
-
-    if not available_iface:
+    if not selected_iface:
         log_data["success"] = False
         log_data["error_code"] = "998"
         log_data["error_message"] = "系统忙，请稍后再试！"
@@ -350,11 +351,8 @@ def activate():
             "username": username,
             "iface": "none"
         })
-
-    iface = available_iface
     
-    # 获取网卡级别锁（只锁定该网卡，不影响其他网卡）
-    lock_fd = acquire_iface_lock(iface)
+    iface = selected_iface
     
     try:
         timestamp = int(time.time())
@@ -488,6 +486,12 @@ def activate():
                 subprocess.run(['sudo', 'pkill', '-9', '-P', str(proc.pid)], check=False)
                 time.sleep(1)
         
+        # 异常情况下尝试删除 ppp 接口（避免内核残留）
+        if ppp_interface:
+            logger.info(f"异常情况下尝试删除 ppp 接口: {ppp_interface}")
+            subprocess.run(['sudo', 'ip', 'link', 'delete', ppp_interface], check=False)
+            time.sleep(0.5)
+        
         # 检测错误类型
         error_code, error_message = detect_pppoe_error(log_file)
         logger.info(f"检测到错误: {error_code} - {error_message}")
@@ -523,11 +527,6 @@ def activate():
     # 额外清理：确保没有残留的 pppd 进程（通过网卡名）
     subprocess.run(['sudo', 'pkill', '-9', '-f', f'pppd.*{iface}'], check=False)
     time.sleep(1)
-
-    # 额外保险：如果知道 ppp 接口名，也可以尝试关闭它（非必须）
-    if ppp_interface:
-        # 确保内核释放虚拟接口（有时需要）
-        subprocess.run(['sudo', 'ip', 'link', 'delete', ppp_interface], check=False)
 
     # ✅ 成功：补全所有字段
     log_data["success"] = True
