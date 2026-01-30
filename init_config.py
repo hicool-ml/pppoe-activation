@@ -9,6 +9,7 @@ import sys
 import json
 import subprocess
 from flask import Flask, render_template, request, jsonify, redirect, url_for
+from models import NetworkConfig
 
 app = Flask(__name__)
 
@@ -93,7 +94,9 @@ def get_current_config():
         'instance_path': '/opt/pppoe-activation/instance',
         'app_port': 80,
         'admin_port': 80,
-        'tz': 'Asia/Shanghai'
+        'tz': 'Asia/Shanghai',
+        'net_mode': 'physical',
+        'vlan_id': ''
     }
     
     # 读取 config.py
@@ -131,6 +134,22 @@ def get_current_config():
                         config['admin_port'] = int(value)
                     elif key == 'TZ':
                         config['tz'] = value
+                    elif key == 'NET_MODE':
+                        config['net_mode'] = value
+                    elif key == 'VLAN_ID':
+                        config['vlan_id'] = value
+    
+    # 从数据库读取网络配置（优先级最高）
+    try:
+        from app import SessionLocal
+        session = SessionLocal()
+        net_config = session.query(NetworkConfig).first()
+        if net_config:
+            config['net_mode'] = net_config.net_mode
+            config['vlan_id'] = net_config.vlan_id
+        session.close()
+    except Exception as e:
+        print(f"从数据库读取网络配置失败: {e}")
     
     return config
 
