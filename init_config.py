@@ -144,6 +144,48 @@ def get_current_config():
     return config
 
 
+def ensure_vlan_interface(base, vlan_id):
+    """
+    确保 VLAN 子接口存在
+    
+    Args:
+        base: 基础物理接口（如 enp3s0）
+        vlan_id: VLAN ID（如 100）
+    
+    Returns:
+        str: VLAN 子接口名（如 enp3s0.100）
+    """
+    vlan_if = f"{base}.{vlan_id}"
+    
+    try:
+        # 检查 VLAN 子接口是否已存在
+        result = subprocess.run(['ip', 'link', 'show', vlan_if], 
+                              capture_output=True, text=True, check=False)
+        
+        if result.returncode == 0:
+            print(f"VLAN 子接口 {vlan_if} 已存在")
+        else:
+            # 创建 VLAN 子接口
+            print(f"创建 VLAN 子接口: {vlan_if}")
+            subprocess.run(
+                ['ip', 'link', 'add', 'link', base, 'name', vlan_if, 'type', 'vlan', 'id', str(vlan_id)],
+                check=True,
+                stderr=subprocess.PIPE
+            )
+            print(f"VLAN 子接口 {vlan_if} 创建成功")
+        
+        # 确保 VLAN 子接口处于 UP 状态
+        subprocess.run(['ip', 'link', 'set', vlan_if, 'up'], check=True)
+        print(f"VLAN 子接口 {vlan_if} 已设置为 UP 状态")
+        
+        return vlan_if
+    except subprocess.CalledProcessError as e:
+        print(f"创建/配置 VLAN 子接口失败: {e}")
+        if e.stderr:
+            print(f"错误详情: {e.stderr.decode('utf-8', errors='ignore')}")
+        raise RuntimeError(f"创建 VLAN 子接口失败: {str(e)}")
+
+
 def save_config(data):
     """保存配置"""
     # 保存 config.py
@@ -156,6 +198,8 @@ BASE_DIR = '/opt/pppoe-activation'
 DATABASE_PATH = '/opt/pppoe-activation/instance/database.db'
 
 # 网卡配置（用户配置）
+# 注意：NETWORK_INTERFACES 仅用于初始化默认值展示，不参与运行期逻辑
+# 运行期网络配置请参考数据库中的 NetworkConfig 表
 NETWORK_INTERFACES = {json.dumps(data.get('interfaces', ['eth0']))}
 
 # 日志目录
@@ -178,6 +222,8 @@ APP_PORT={data.get('app_port', 8080)}
 ADMIN_PORT={data.get('admin_port', 8081)}
 
 # 网卡配置（使用空格分隔多个网卡）
+# 注意：NETWORK_INTERFACES 仅用于 docker-compose 兼容性，主程序不得读取
+# 运行期网络配置请参考数据库中的 NetworkConfig 表
 NETWORK_INTERFACES={' '.join(data.get('interfaces', ['eth0']))}
 
 # 时区配置
@@ -209,10 +255,17 @@ VLAN_ID={data.get('vlan_id', '')}
         net_config.vlan_id = data.get('vlan_id') or None
         session.add(net_config)
         session.commit()
-        session.close()
         print(f"网络配置已保存到数据库: net_mode={net_config.net_mode}, vlan_id={net_config.vlan_id}")
+        
+        # 如果是 VLAN 模式，创建 VLAN 子接口
+        if net_config.net_mode == "vlan" and net_config.vlan_id:
+            ensure_vlan_interface(net_config.base_interface, net_config.vlan_id)
+            print(f"VLAN 子接口已创建: {net_config.base_interface}.{net_config.vlan_id}")
+        
+        session.close()
     except Exception as e:
         print(f"保存网络配置到数据库失败: {e}")
+        raise
     
     # 创建初始化标记
     with open(INIT_FLAG_FILE, 'w') as f:

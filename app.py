@@ -36,37 +36,37 @@ CONFIG_FILE = '/opt/pppoe-activation/config.py'
 ENV_FILE = '/opt/pppoe-activation/.env'
 INIT_FLAG_FILE = '/opt/pppoe-activation/.initialized'
 
-# 从数据库读取网络接口配置
-def get_network_interfaces_from_db():
-    """从数据库读取网络接口配置"""
-    try:
-        from flask_sqlalchemy import SQLAlchemy
-        db_app = Flask(__name__)
-        db_app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:////opt/pppoe-activation/instance/database.db'
-        db_app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-        db = SQLAlchemy(db_app)
-        
-        class Config(db.Model):
-            id = db.Column(db.Integer, primary_key=True)
-            name = db.Column(db.String(50), unique=True)
-            value = db.Column(db.String(500))
-        
-        with db_app.app_context():
-            config = Config.query.filter_by(name='NETWORK_INTERFACES').first()
-            if config and config.value:
-                interfaces = config.value.split()
-                logger.info(f"从数据库读取网络接口配置: {interfaces}")
-                return interfaces
-    except Exception as e:
-        logger.error(f"从数据库读取网络接口配置失败: {e}")
+# 获取网络接口配置（仅从数据库读取，不回退到 config.py）
+def get_pppoe_interface(session):
+    """
+    获取 PPPoE 使用的最终接口名
     
-    # 如果数据库读取失败，使用config.py中的配置
-    from config import NETWORK_INTERFACES as CONFIG_INTERFACES
-    logger.info(f"使用config.py中的网络接口配置: {CONFIG_INTERFACES}")
-    return CONFIG_INTERFACES
-
-# 获取网络接口配置
-NETWORK_INTERFACES = get_network_interfaces_from_db()
+    根据数据库中的网络配置，返回物理接口或 VLAN 子接口
+    
+    Args:
+        session: SQLAlchemy 会话
+    
+    Returns:
+        str: 最终接口名（如 enp3s0 或 enp3s0.100）
+    
+    Raises:
+        RuntimeError: 如果网络配置不存在
+    """
+    net_config = session.query(NetworkConfig).first()
+    if not net_config:
+        raise RuntimeError("网络配置不存在，请先初始化系统")
+    
+    if net_config.net_mode == "physical":
+        logger.info(f"使用物理网卡: {net_config.base_interface}")
+        return net_config.base_interface
+    elif net_config.net_mode == "vlan":
+        if not net_config.vlan_id:
+            raise RuntimeError("VLAN 模式需要指定 VLAN ID")
+        vlan_iface = f"{net_config.base_interface}.{net_config.vlan_id}"
+        logger.info(f"使用 VLAN 子接口: {vlan_iface}")
+        return vlan_iface
+    else:
+        raise RuntimeError(f"不支持的网络模式: {net_config.net_mode}")
 
 
 def log_activation(data):
@@ -315,28 +315,16 @@ def activate():
     
     # 使用"锁即资源"的方式查找可用网卡（避免竞态窗口）
     # 从数据库读取网络配置
-    net_config = NetworkConfig.query.first()
-    
-    # 如果数据库中没有配置，使用 config.py 的默认值
-    if not net_config:
-        net_mode = 'physical'
-        base_interface = NETWORK_INTERFACES[0] if NETWORK_INTERFACES else 'eth0'
-        vlan_id = None
-        logger.info(f"数据库中没有网络配置，使用默认值: {net_mode}, {base_interface}")
-    else:
-        net_mode = net_config.net_mode
-        base_interface = net_config.base_interface
-        vlan_id = net_config.vlan_id
-        logger.info(f"从数据库读取网络配置: {net_mode}, {base_interface}, vlan={vlan_id}")
-    
     selected_iface = None
     lock_fd = None
     
     try:
-        # 使用接口准备层准备接口（物理或VLAN）
-        iface = prepare_interface(net_mode, base_interface, vlan_id)
+        # 获取 PPPoE 使用的最终接口名（仅从数据库读取）
+        session = SessionLocal()
+        iface = get_pppoe_interface(session)
         selected_iface = iface
-    except ValueError as e:
+        session.close()
+    except RuntimeError as e:
         log_data["success"] = False
         log_data["error_code"] = "997"
         log_data["error_message"] = f"网络配置错误: {str(e)}"
