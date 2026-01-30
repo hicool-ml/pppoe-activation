@@ -251,6 +251,42 @@
                 <div class="config-card">
                     <div class="section-title">📡 网卡配置</div>
                     <div class="form-group">
+                        <label>网络模式：</label>
+                        <div class="hint">选择网络模式：物理网卡或VLAN子接口</div>
+                        <div class="row">
+                            <div class="col">
+                                <div class="form-group">
+                                    <label>
+                                        <input type="radio" name="net_mode" value="physical"
+                                               {% if current_config.net_mode == 'physical' %}checked{% endif %}
+                                               onclick="toggleNetMode('physical')">
+                                        物理网卡模式
+                                    </label>
+                                    <div class="hint">直接使用物理网卡（如 enp3s0）</div>
+                                </div>
+                            </div>
+                            <div class="col">
+                                <div class="form-group">
+                                    <label>
+                                        <input type="radio" name="net_mode" value="vlan"
+                                               {% if current_config.net_mode == 'vlan' %}checked{% endif %}
+                                               onclick="toggleNetMode('vlan')">
+                                        VLAN子接口模式
+                                    </label>
+                                    <div class="hint">在物理网卡上创建VLAN子接口（如 enp3s0.100）</div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        {% if current_config.net_mode == 'vlan' %}
+                        <div class="form-group" id="vlan_config_group">
+                            <label for="vlan_id">VLAN ID：</label>
+                            <input type="number" id="vlan_id" name="vlan_id" min="1" max="4094"
+                                   value="{{ current_config.vlan_id if current_config.vlan_id else 100 }}">
+                            <div class="hint">VLAN ID范围：1-4094（例如：100, 200, 300）</div>
+                        </div>
+                        {% endif %}
+                        
                         <label>选择可用的网卡：</label>
                         <div class="hint">系统已检测到以下网卡，请选择用于PPPoE拨号的网卡</div>
                         <div class="interfaces-grid">
@@ -364,6 +400,15 @@
             const checkbox = element.querySelector('input[type="checkbox"]');
             checkbox.checked = !checkbox.checked;
             element.classList.toggle('selected', checkbox.checked);
+        }
+        
+        function toggleNetMode(mode) {
+            const vlanConfigGroup = document.getElementById('vlan_config_group');
+            if (mode === 'vlan') {
+                vlanConfigGroup.style.display = 'block';
+            } else {
+                vlanConfigGroup.style.display = 'none';
+            }
         }
 
         // 查看当前配置

@@ -255,7 +255,9 @@ def save():
             'instance_path': request.form.get('instance_path', './instance'),
             'app_port': int(request.form.get('app_port', 80)),
             'admin_port': int(request.form.get('admin_port', 80)),
-            'tz': request.form.get('tz', 'Asia/Shanghai')
+            'tz': request.form.get('tz', 'Asia/Shanghai'),
+            'net_mode': request.form.get('net_mode', 'physical'),
+            'vlan_id': request.form.get('vlan_id', '')
         }
         
         save_config(data)
