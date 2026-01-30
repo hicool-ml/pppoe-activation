@@ -9,11 +9,9 @@ import json
 import re
 import fcntl
 import logging
-from config import BASE_DIR, PPP_LOG_DIR, APP_PORT
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from models import ActivationLog, Base, NetworkConfig
-from network.interface import prepare_interface
 
 app = Flask(__name__, static_folder='static', template_folder='templates')
 app.secret_key = os.environ.get('SECRET_KEY', os.urandom(32))
@@ -28,37 +26,73 @@ engine = create_engine(f'sqlite:///{DATABASE_PATH}', echo=False)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base.metadata.create_all(bind=engine)
 
+# 从环境变量读取配置（不再从config.py导入）
+BASE_DIR = os.environ.get("BASE_DIR", "/opt/pppoe-activation")
+PPP_LOG_DIR = os.environ.get("LOGS_PATH", f"{BASE_DIR}/logs")
+APP_PORT = int(os.environ.get("APP_PORT", 8080))
+
 LOG_FILE = os.path.join(BASE_DIR, 'activation_log.jsonl')
 # 锁目录，用于存储每个网卡的锁文件
 LOCK_DIR = os.path.join(BASE_DIR, 'locks')
 os.makedirs(LOCK_DIR, exist_ok=True)
-CONFIG_FILE = '/opt/pppoe-activation/config.py'
-ENV_FILE = '/opt/pppoe-activation/.env'
-INIT_FLAG_FILE = '/opt/pppoe-activation/.initialized'
 
-# 获取网络接口配置（仅从数据库读取，不回退到 config.py）
-def get_pppoe_interface(session):
+# 接口轮询计数器（线程安全）
+# 已废弃：使用"锁即资源"模型替代轮询机制
+# import threading
+# interface_counter = 0
+# interface_counter_lock = threading.Lock()
+
+# 获取运行期网络接口（只读数据库，不做任何写入操作）
+def get_runtime_interfaces(session):
     """
-    获取 PPPoE 使用的最终接口名
+    获取 PPPoE 使用的最终接口列表（只读数据库）
     
-    根据数据库中的网络配置，返回物理接口或 VLAN 子接口
+    根据数据库中的网络配置，返回物理接口或 VLAN 子接口列表
+    如果数据库中没有配置或配置不完整，抛出异常
     
     Args:
         session: SQLAlchemy 会话
     
     Returns:
-        str: 最终接口名（如 enp3s0 或 enp3s0.100）
+        list: 接口列表（如 ['enp3s0'] 或 ['enp3s0.100', 'enp3s0.101']）
     
     Raises:
-        RuntimeError: 如果网络配置不存在
+        RuntimeError: 如果系统尚未初始化或配置不完整
     """
     net_config = session.query(NetworkConfig).first()
-    if not net_config:
-        raise RuntimeError("未找到网络配置，请先完成初始化")
     
-    iface = net_config.effective_interface()
-    logger.info(f"PPPoE 使用接口: {iface} (模式: {net_config.net_mode})")
-    return iface
+    # 如果数据库中没有配置，抛出异常（不再自动检测）
+    if not net_config:
+        raise RuntimeError(
+            "系统尚未初始化，请先访问初始化配置页面完成网络配置（http://192.168.0.112:9999）"
+        )
+    
+    # 根据网络模式返回接口列表
+    if net_config.net_mode == 'vlan':
+        # VLAN 模式：返回所有 VLAN 子接口列表
+        if not net_config.vlan_id or not net_config.base_interface:
+            raise RuntimeError(f"VLAN 配置不完整：base_interface={net_config.base_interface}, vlan_id={net_config.vlan_id}")
+        
+        vlan_ids = net_config.vlan_id.split(',')
+        vlan_interfaces = []
+        for vlan_id in vlan_ids:
+            vlan_id = vlan_id.strip()
+            if vlan_id:
+                vlan_interfaces.append(f"{net_config.base_interface}.{vlan_id}")
+        
+        if not vlan_interfaces:
+            raise RuntimeError(f"VLAN 配置无效：vlan_id={net_config.vlan_id}")
+        
+        logger.info(f"VLAN 模式：使用 VLAN 子接口列表: {vlan_interfaces}")
+        return vlan_interfaces
+    
+    else:
+        # 物理模式：返回物理网卡
+        if not net_config.base_interface:
+            raise RuntimeError("物理模式配置不完整：未配置物理网卡")
+        
+        logger.info(f"物理模式：使用物理网卡: {net_config.base_interface}")
+        return [net_config.base_interface]
 
 
 def log_activation(data):
@@ -147,6 +181,29 @@ def check_interface_carrier(iface):
     except Exception as e:
         logger.error(f"检查网卡 {iface} carrier状态失败: {e}")
         return True  # 如果检查失败，假设有连接
+
+
+def ensure_interfaces_exist(interfaces):
+    """
+    校验网络接口是否存在（只校验，不创建）
+    
+    Args:
+        interfaces: 接口列表（如 ['enp3s0'] 或 ['enp3s0.100', 'enp3s0.101']）
+    
+    Raises:
+        RuntimeError: 如果网络接口不存在
+    """
+    for iface in interfaces:
+        result = subprocess.run(
+            ['ip', 'link', 'show', iface],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL
+        )
+        if result.returncode != 0:
+            raise RuntimeError(
+                f"网络接口不存在: {iface}，请重新初始化配置（http://192.168.0.112:9999）"
+            )
+        logger.info(f"网络接口存在性校验通过: {iface}")
 
 
 def detect_pppoe_error(log_file):
@@ -287,17 +344,49 @@ def activate():
     log_data["error_message"] = None
 
     # 为每个网卡创建单独的锁文件（实现网卡级别的并发）
-    def acquire_iface_lock(iface):
-        """获取网卡的锁文件描述符"""
-        lock_path = os.path.join(LOCK_DIR, f'{iface}.lock')
-        fd = open(lock_path, 'w')
-        fcntl.flock(fd.fileno(), fcntl.LOCK_EX)
-        return fd
-    
     def release_iface_lock(lock_fd):
         """释放网卡的锁"""
         fcntl.flock(lock_fd.fileno(), fcntl.LOCK_UN)
         lock_fd.close()
+    
+    def try_acquire_iface(iface_list):
+        """
+        从 iface_list 中尝试获取一个可用接口（"锁即资源"模型）
+        
+        使用非阻塞锁遍历接口列表，成功获取锁的接口即为可用接口
+        这样"选接口 + 加锁"一步完成，没有竞态窗口
+        
+        Args:
+            iface_list: 接口列表（如 ['enp3s0.100', 'enp3s0.101']）
+        
+        Returns:
+            (iface, lock_fd): 成功返回 (接口名, 锁文件描述符)
+            (None, None): 失败返回 (None, None)
+        """
+        for iface in iface_list:
+            lock_path = os.path.join(LOCK_DIR, f'{iface}.lock')
+            try:
+                fd = open(lock_path, 'w')
+                # 使用非阻塞锁尝试获取接口
+                fcntl.flock(fd.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                logger.info(f"成功抢占接口 {iface}")
+                return iface, fd
+            except BlockingIOError:
+                # 该接口已被占用，关闭文件描述符，尝试下一个
+                fd.close()
+                continue
+            except Exception as e:
+                # 其他异常，关闭文件描述符，尝试下一个
+                logger.warning(f"获取接口 {iface} 锁失败: {e}")
+                try:
+                    fd.close()
+                except:
+                    pass
+                continue
+        
+        # 所有接口都不可用
+        logger.warning(f"所有接口均不可用: {iface_list}")
+        return None, None
     
     # 兼容性：如果 LOCK_DIR 不存在，创建锁目录
     try:
@@ -306,16 +395,38 @@ def activate():
         pass
     
     # 使用"锁即资源"的方式查找可用网卡（避免竞态窗口）
-    # 从数据库读取网络配置
-    selected_iface = None
+    # 从数据库读取网络配置（只读，不做任何写入操作）
+    iface = None
     lock_fd = None
     
     try:
-        # 获取 PPPoE 使用的最终接口名（仅从数据库读取）
+        # 获取 PPPoE 使用的接口列表（仅从数据库读取）
         session = SessionLocal()
-        iface = get_pppoe_interface(session)
-        selected_iface = iface
+        iface_list = get_runtime_interfaces(session)
         session.close()
+        
+        logger.info(f"从数据库读取接口列表: {iface_list}")
+        
+        # 使用"锁即资源"模型选择接口（一步完成选接口 + 加锁）
+        iface, lock_fd = try_acquire_iface(iface_list)
+        
+        if not iface:
+            log_data["success"] = False
+            log_data["error_code"] = "998"
+            log_data["error_message"] = "系统忙，暂无可用拨号通道"
+            log_activation(log_data)
+            logger.error(f"所有接口均不可用")
+            return jsonify({
+                "success": False,
+                "error_code": "998",
+                "error_message": "系统忙，暂无可用拨号通道",
+                "username": username,
+                "iface": "none"
+            })
+        
+        # 校验接口是否存在（只校验，不创建）
+        ensure_interfaces_exist([iface])
+        
     except RuntimeError as e:
         log_data["success"] = False
         log_data["error_code"] = "997"
@@ -329,22 +440,6 @@ def activate():
             "username": username,
             "iface": "none"
         })
-    
-    if not selected_iface:
-        log_data["success"] = False
-        log_data["error_code"] = "998"
-        log_data["error_message"] = "系统忙，请稍后再试！"
-        log_activation(log_data)
-        logger.error(f"没有可用的网卡")
-        return jsonify({
-            "success": False,
-            "error_code": "998",
-            "error_message": "系统忙，请稍后再试！",
-            "username": username,
-            "iface": "none"
-        })
-    
-    iface = selected_iface
     
     try:
         timestamp = int(time.time())
@@ -377,7 +472,13 @@ def activate():
         log_data["mac"] = new_mac
 
     finally:
-        release_iface_lock(lock_fd)  # 释放网卡锁
+        # 释放网卡锁
+        if lock_fd:
+            try:
+                release_iface_lock(lock_fd)
+                logger.info(f"成功释放网卡 {iface} 的锁")
+            except Exception as e:
+                logger.error(f"释放网卡锁失败: {e}")
 
     # === 锁外执行拨号（避免长时间持有锁）===
 
@@ -415,7 +516,7 @@ def activate():
         log_data["username"] = username
 
     ppp_cmd = [
-        'sudo', 'pppd',
+        'pppd',
         'plugin', 'rp-pppoe.so', iface,
         'user', username,
         'password', password,
@@ -536,282 +637,6 @@ def activate():
     })
 
 
-# =============================
-# 配置服务端点
-# =============================
-
-def get_available_interfaces():
-    """获取可用的网络接口"""
-    try:
-        # 获取网卡状态
-        result = subprocess.run(['ip', 'link', 'show'], capture_output=True, text=True)
-        interfaces = []
-        for line in result.stdout.split('\n'):
-            if ': ' in line and not line.strip().startswith('lo'):
-                # 提取接口名称
-                iface = line.split(':')[1].strip().split('@')[0]
-                if iface and not iface.startswith('docker') and not iface.startswith('br-'):
-                    # 检查网卡状态
-                    status = 'DOWN'
-                    if ',UP,' in line or ',UP ' in line:
-                        status = 'UP'
-                    elif ',LOWER_UP,' in line or ',LOWER_UP ' in line:
-                        status = 'UP'
-                    interfaces.append({'name': iface, 'status': status})
-        
-        # 获取网卡 IP 地址
-        result = subprocess.run(['ip', 'addr', 'show'], capture_output=True, text=True)
-        ip_dict = {}
-        current_iface = None
-        for line in result.stdout.split('\n'):
-            if ': ' in line:
-                parts = line.split(':')
-                if len(parts) >= 2:
-                    iface_num = parts[0].strip()
-                    if iface_num.isdigit():
-                        # 查找接口名称
-                        for i in range(len(result.stdout.split('\n'))):
-                            if result.stdout.split('\n')[i].strip().startswith(f"{iface_num}: "):
-                                match = result.stdout.split('\n')[i].strip().split(f"{iface_num}: ")[1].split()[0]
-                                current_iface = match
-                                break
-        
-        # 获取每个网卡的 IP 地址
-        for iface in interfaces:
-            # 获取网卡的 IP 地址
-            ip_result = subprocess.run(['ip', 'addr', 'show', iface['name']], capture_output=True, text=True)
-            ip_address = None
-            for line in ip_result.stdout.split('\n'):
-                if 'inet ' in line and 'inet6' not in line:
-                    # 提取 IP 地址
-                    ip_match = line.split('inet ')[1].split()[0]
-                    if '/' in ip_match:
-                        ip_address = ip_match.split('/')[0]
-                    else:
-                        ip_address = ip_match
-                    break
-            
-            # 如果有 IP 地址，显示为 DHCP/静态
-            if ip_address:
-                iface['ip'] = ip_address
-                iface['ip_type'] = 'DHCP/静态'
-            else:
-                iface['ip'] = None
-                iface['ip_type'] = '无IP'
-        
-        return sorted(interfaces, key=lambda x: x['name'])
-    except Exception as e:
-        logger.error(f"获取网卡列表失败: {e}")
-        return []
-
-
-def get_current_config():
-    """获取当前配置"""
-    config = {
-        'interfaces': [],
-        'data_path': './data',
-        'logs_path': './logs',
-        'db_path': './instance/database.db',
-        'instance_path': './instance',
-        'app_port': APP_PORT,
-        'admin_port': 8081,
-        'tz': 'Asia/Shanghai'
-    }
-    
-    # 从数据库读取配置
-    try:
-        from flask_sqlalchemy import SQLAlchemy
-        db_app = Flask(__name__)
-        db_app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:////opt/pppoe-activation/instance/database.db'
-        db_app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-        db = SQLAlchemy(db_app)
-        
-        class Config(db.Model):
-            id = db.Column(db.Integer, primary_key=True)
-            name = db.Column(db.String(50), unique=True)
-            value = db.Column(db.String(500))
-        
-        with db_app.app_context():
-            configs = Config.query.all()
-            for c in configs:
-                if c.name == 'NETWORK_INTERFACES':
-                    config['interfaces'] = c.value.split() if c.value else []
-                elif c.name == 'DATA_PATH':
-                    config['data_path'] = c.value
-                elif c.name == 'LOGS_PATH':
-                    config['logs_path'] = c.value
-                elif c.name == 'DB_PATH':
-                    config['db_path'] = c.value
-                elif c.name == 'INSTANCE_PATH':
-                    config['instance_path'] = c.value
-                elif c.name == 'APP_PORT':
-                    config['app_port'] = int(c.value) if c.value else APP_PORT
-                elif c.name == 'ADMIN_PORT':
-                    config['admin_port'] = int(c.value) if c.value else 8081
-    except Exception as e:
-        logger.error(f"从数据库读取配置失败: {e}")
-    
-    return config
-
-
-def save_config(data):
-    """保存配置"""
-    # 保存网络接口配置到数据库
-    interfaces = data.get('interfaces', [])
-    from flask_sqlalchemy import SQLAlchemy
-    db_app = Flask(__name__)
-    db_app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:////opt/pppoe-activation/instance/database.db'
-    db_app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-    db = SQLAlchemy(db_app)
-    
-    class Config(db.Model):
-        id = db.Column(db.Integer, primary_key=True)
-        name = db.Column(db.String(50), unique=True)
-        value = db.Column(db.String(500))
-    
-    with db_app.app_context():
-        # 保存网络接口配置
-        config = Config.query.filter_by(name='NETWORK_INTERFACES').first()
-        if config:
-            config.value = ' '.join(interfaces)
-        else:
-            config = Config(name='NETWORK_INTERFACES', value=' '.join(interfaces))
-            db.session.add(config)
-        
-        # 保存应用端口配置
-        for key, value in [('APP_PORT', data.get('app_port', 8080)), ('ADMIN_PORT', data.get('admin_port', 8081))]:
-            config = Config.query.filter_by(name=key).first()
-            if config:
-                config.value = str(value)
-            else:
-                config = Config(name=key, value=str(value))
-                db.session.add(config)
-        
-        # 保存路径配置
-        path_configs = [
-            ('DATA_PATH', data.get('data_path', './data')),
-            ('LOGS_PATH', data.get('logs_path', './logs')),
-            ('DB_PATH', data.get('db_path', './instance/database.db')),
-            ('INSTANCE_PATH', data.get('instance_path', './instance'))
-        ]
-        
-        for key, value in path_configs:
-            config = Config.query.filter_by(name=key).first()
-            if config:
-                config.value = value
-            else:
-                config = Config(name=key, value=value)
-                db.session.add(config)
-        
-        db.session.commit()
-        logger.info(f"配置已保存到数据库")
-    
-    # 保存 config.py
-    config_content = f"""# PPPOE 激活系统配置文件
-# 自动生成于 {subprocess.run(['date'], capture_output=True, text=True).stdout.strip()}
-
-BASE_DIR = '/opt/pppoe-activation'
-
-# SQLite 数据库绝对路径（固定）
-DATABASE_PATH = '/opt/pppoe-activation/instance/database.db'
-
-# 网卡配置（用户配置）
-NETWORK_INTERFACES = {json.dumps(data.get('interfaces', ['eth0']))}
-
-# 日志目录
-PPP_LOG_DIR = f'{{BASE_DIR}}/logs'
-
-# 服务端口配置
-APP_PORT = {data.get('app_port', 8080)}
-ADMIN_PORT = {data.get('admin_port', 8081)}
-"""
-
-    with open(CONFIG_FILE, 'w') as f:
-        f.write(config_content)
-    
-    # 保存 .env
-    env_content = f"""# PPPOE 激活系统 Docker 环境变量配置
-# 自动生成于 {subprocess.run(['date'], capture_output=True, text=True).stdout.strip()}
-
-# 应用端口配置
-APP_PORT={data.get('app_port', 8080)}
-ADMIN_PORT={data.get('admin_port', 8081)}
-
-# 网卡配置（使用空格分隔多个网卡）
-NETWORK_INTERFACES={' '.join(data.get('interfaces', ['eth0']))}
-
-# 时区配置
-TZ={data.get('tz', 'Asia/Shanghai')}
-
-# 数据持久化路径配置
-DATA_PATH={data.get('data_path', './data')}
-LOGS_PATH={data.get('logs_path', './logs')}
-DB_PATH={data.get('db_path', './instance/database.db')}
-INSTANCE_PATH={data.get('instance_path', './instance')}
-"""
-
-    with open(ENV_FILE, 'w') as f:
-        f.write(env_content)
-    
-    # 创建初始化标记
-    with open(INIT_FLAG_FILE, 'w') as f:
-        f.write('initialized')
-    
-    # 立即重启主应用容器
-    try:
-        result = subprocess.run(['docker', 'restart', 'pppoe-activation'], 
-                              capture_output=True, text=True, timeout=10)
-        logger.info(f"主应用容器重启命令已执行: {result.stdout}")
-    except Exception as e:
-        logger.error(f"重启主应用容器失败: {e}")
-
-    return True
-
-
-@app.route('/config')
-def config_page():
-    """配置页面"""
-    available_interfaces = get_available_interfaces()
-    current_config = get_current_config()
-    return render_template('init_config.html',
-                       available_interfaces=available_interfaces,
-                       current_config=current_config)
-
-
-@app.route('/api/interfaces')
-def api_interfaces():
-    """获取可用网卡列表"""
-    interfaces = get_available_interfaces()
-    return jsonify({'interfaces': interfaces})
-
-
-@app.route('/api/config', methods=['GET', 'POST'])
-def api_config():
-    """获取或保存配置"""
-    if request.method == 'GET':
-        config = get_current_config()
-        return jsonify(config)
-    elif request.method == 'POST':
-        data = request.get_json()
-        try:
-            save_config(data)
-            return jsonify({'success': True, 'message': '配置保存成功'})
-        except Exception as e:
-            return jsonify({'success': False, 'message': f'配置保存失败: {str(e)}'}), 500
-
-
-@app.route('/api/restart-status')
-def restart_status():
-    """获取重启状态"""
-    try:
-        result = subprocess.run(['docker', 'ps', '-a', '--format', '{{.Status}}', 'pppoe-activation'],
-                              capture_output=True, text=True)
-        status = result.stdout.strip()
-        return jsonify({'status': status})
-    except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)})
-
-
 @app.route('/api/dial-logs')
 def api_dial_logs():
     """获取最新的详细拨号日志（无需登录）"""
@@ -849,33 +674,6 @@ def api_dial_logs():
     except Exception as e:
         logger.error(f"获取拨号日志失败: {e}")
         return jsonify({"error": f'获取拨号日志失败: {str(e)}'}), 500
-
-
-@app.route('/save', methods=['POST'])
-def save():
-    """保存配置并重启"""
-    try:
-        data = {
-            'interfaces': request.form.getlist('interfaces'),
-            'data_path': request.form.get('data_path', './data'),
-            'logs_path': request.form.get('logs_path', './logs'),
-            'db_path': request.form.get('db_path', './instance/database.db'),
-            'instance_path': request.form.get('instance_path', './instance'),
-            'app_port': int(request.form.get('app_port', 80)),
-            'admin_port': int(request.form.get('admin_port', 80)),
-            'tz': request.form.get('tz', 'Asia/Shanghai'),
-            'net_mode': request.form.get('net_mode', 'physical'),
-            'vlan_id': request.form.get('vlan_id', '')
-        }
-        
-        save_config(data)
-        
-        return render_template('init_success.html', config=data)
-    except Exception as e:
-        return render_template('init_config.html',
-                           available_interfaces=get_available_interfaces(),
-                           current_config=get_current_config(),
-                           error=str(e))
 
 
 if __name__ == '__main__':

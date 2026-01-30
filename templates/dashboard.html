@@ -195,7 +195,11 @@
         <div class="tabs">
             <a href="/dashboard" class="tab active">📊 仪表盘</a>
             <a href="/logs" class="tab">📝 激活日志</a>
+            {% if current_role == 'super' %}
+            <a href="http://{{ request.host.split(':')[0] }}:9999" class="tab">⚙️ 系统配置</a>
+            {% else %}
             <a href="/config" class="tab">⚙️ 系统配置</a>
+            {% endif %}
             <a href="/admin_list" class="tab">👥 管理员管理</a>
             <a href="/logout" class="tab">🚪 登出</a>
         </div>

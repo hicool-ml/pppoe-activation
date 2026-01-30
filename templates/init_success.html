@@ -201,10 +201,15 @@
             <div class="step">请及时修改默认密码！</div>
         </div>
 
-        <p style="color: #666; font-size: 14px;">
+         <p style="color: #666; font-size: 14px;">
             配置文件已保存到：<span class="code">/opt/pppoe-activation/config.py</span> 和
             <span class="code">/opt/pppoe-activation/.env</span>
         </p>
+
+        <div style="margin-top: 30px;">
+            <a href="/" class="button">⬅️ 返回配置页面</a>
+            <a href="http://{{ request.host.split(':')[0] }}:{{ config.admin_port }}/dashboard" class="button" target="_blank" style="background-color: #28a745; margin-left: 10px;">📊 进入管理后台</a>
+        </div>
     </div>
 </body>
 </html>

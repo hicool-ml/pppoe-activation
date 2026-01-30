@@ -81,8 +81,6 @@ htmlcov/
 .tox/
 
 # 开发和调试脚本（不应该打包进镜像）
-app_v3.py
-app_v2.app
 clean_invalid.py
 clean_logs_by_schema.py
 fix_db_time.py

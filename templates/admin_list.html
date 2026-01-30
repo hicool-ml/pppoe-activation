@@ -214,7 +214,11 @@
         <div class="tabs">
             <a href="/dashboard" class="tab">📊 仪表盘</a>
             <a href="/logs" class="tab">📝 激活日志</a>
+            {% if current_role == 'super' %}
+            <a href="http://{{ request.host.split(':')[0] }}:9999" class="tab">⚙️ 系统配置</a>
+            {% else %}
             <a href="/config" class="tab">⚙️ 系统配置</a>
+            {% endif %}
             <a href="/admin_list" class="tab active">👥 管理员管理</a>
             <a href="/logout" class="tab">🚪 登出</a>
         </div>
@@ -239,63 +243,67 @@
                                 <th>操作</th>
                             </tr>
                         </thead>
-                        <tbody>
-                            {% for a in admins %}
-                            <tr>
-                                <td><strong>{{ a.username }}</strong></td>
-                                <td>
-                                    <span class="badge {% if a.role == 'super' %}badge-super{% else %}badge-admin{% endif %}">
-                                        {{ '超级管理员' if a.role == 'super' else '管理员' }}
-                                    </span>
-                                </td>
-                                <td>{{ a.created_at.strftime('%Y-%m-%d %H:%M') if a.created_at else 'N/A' }}</td>
-                                <td>
-                                    <a href="/change_password?username={{ a.username }}" class="btn btn-primary btn-sm">
-                                        修改密码
-                                    </a>
-                                    <form action="/admin_delete" method="post" style="display:inline">
-                                        <input type="hidden" name="username" value="{{ a.username }}">
-                                        <button type="submit" class="btn btn-danger btn-sm"
-                                                onclick="return confirm('确定要删除管理员 {{ a.username }} 吗？')">
-                                            删除
-                                        </button>
-                                    </form>
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
+                         <tbody>
+                             {% for a in admins %}
+                             <tr>
+                                 <td><strong>{{ a.username }}</strong></td>
+                                 <td>
+                                     <span class="badge {% if a.role == 'super' %}badge-super{% else %}badge-admin{% endif %}">
+                                         {{ '超级管理员' if a.role == 'super' else '管理员' }}
+                                     </span>
+                                 </td>
+                                 <td>{{ a.created_at if a.created_at else 'N/A' }}</td>
+                                 <td>
+                                     <a href="/change_password?username={{ a.username }}" class="btn btn-primary btn-sm">
+                                         修改密码
+                                     </a>
+                                     {% if current_role == 'super' or (current_role == 'admin' and a.role != 'super') %}
+                                     <form action="/admin_delete" method="post" style="display:inline">
+                                         <input type="hidden" name="username" value="{{ a.username }}">
+                                         <button type="submit" class="btn btn-danger btn-sm"
+                                                 onclick="return confirm('确定要删除管理员 {{ a.username }} 吗？')">
+                                             删除
+                                         </button>
+                                     </form>
+                                     {% endif %}
+                                 </td>
+                             </tr>
+                             {% endfor %}
+                         </tbody>
                     </table>
                 </div>
             </div>
             
-            <!-- 新增管理员 -->
-            <div class="card">
-                <h3>➕ 新增管理员</h3>
-                <form action="/admin_add" method="post">
-                    <div class="row">
-                        <div class="col">
-                            <div class="form-group">
-                                <label for="username">用户名</label>
-                                <input type="text" id="username" name="username" required>
-                            </div>
-                        </div>
-                        <div class="col">
-                            <div class="form-group">
-                                <label for="password">密码</label>
-                                <input type="password" id="password" name="password" required>
-                            </div>
-                        </div>
-                        <div class="col">
-                            <div class="form-group">
-                                <label>&nbsp;</label>
-                                <button type="submit" class="btn btn-primary w-100" style="padding: 12px 20px;">
-                                    添加管理员
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </form>
-            </div>
+             <!-- 新增管理员 -->
+             {% if current_role == 'super' %}
+             <div class="card">
+                 <h3>➕ 新增管理员</h3>
+                 <form action="/admin_add" method="post">
+                     <div class="row">
+                         <div class="col">
+                             <div class="form-group">
+                                 <label for="username">用户名</label>
+                                 <input type="text" id="username" name="username" required>
+                             </div>
+                         </div>
+                         <div class="col">
+                             <div class="form-group">
+                                 <label for="password">密码</label>
+                                 <input type="password" id="password" name="password" required>
+                             </div>
+                         </div>
+                         <div class="col">
+                             <div class="form-group">
+                                 <label>&nbsp;</label>
+                                 <button type="submit" class="btn btn-primary w-100" style="padding: 12px 20px;">
+                                     添加管理员
+                                 </button>
+                             </div>
+                         </div>
+                     </div>
+                 </form>
+             </div>
+             {% endif %}
         </div>
     </div>
 </body>

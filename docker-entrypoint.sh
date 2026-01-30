@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # PPPOE 激活系统 Docker 容器启动脚本
-# 版本: 2.0.0
-# 更新日期: 2025-12-19
+# 版本: 3.0.0
+# 职责：只启动主应用服务（app.py），其他服务独立运行
 
 set -e
 RED='\033[0;31m'
@@ -35,112 +35,9 @@ check_env_vars() {
     # 设置默认值
     export APP_PORT=${APP_PORT:-80}
     export ADMIN_PORT=${ADMIN_PORT:-8081}
-    export NETWORK_INTERFACES=${NETWORK_INTERFACES:-"eth0 eth1 eth2 eth3"}
     
     log_info "应用端口: $APP_PORT"
     log_info "管理端口: $ADMIN_PORT"
-    log_info "网络接口: $NETWORK_INTERFACES"
-}
-
-# 生成配置文件
-generate_config() {
-    log_info "生成配置文件..."
-    
-    # 备份原配置文件
-    if [[ -f /opt/pppoe-activation/config.py ]]; then
-        cp /opt/pppoe-activation/config.py /opt/pppoe-activation/config.py.bak
-    fi
-    
-    # 生成新的配置文件
-    cat > /opt/pppoe-activation/config.py <<EOF
-# PPPOE 激活系统配置文件
-# Docker 容器自动生成于 $(date)
-
-BASE_DIR = '/opt/pppoe-activation'
-
-# SQLite 数据库绝对路径（固定）
-DATABASE_PATH = '/opt/pppoe-activation/instance/database.db'
-
-# 网络接口配置（用户配置）
-NETWORK_INTERFACES = [
-EOF
-
-    # 添加网络接口到配置文件
-    IFS=' ' read -ra INTERFACES <<< "$NETWORK_INTERFACES"
-    FIRST=true
-    for interface in "${INTERFACES[@]}"; do
-        if [ "$FIRST" = true ]; then
-            echo "    '$interface'" >> /opt/pppoe-activation/config.py
-            FIRST=false
-        else
-            echo "    , '$interface'" >> /opt/pppoe-activation/config.py
-        fi
-    done
-    echo "]" >> /opt/pppoe-activation/config.py
-
-    # 添加其他配置
-    cat >> /opt/pppoe-activation/config.py <<EOF
-
-# 日志目录
-PPP_LOG_DIR = f'{BASE_DIR}/logs'
-
-# 服务端口配置
-APP_PORT = $APP_PORT
-ADMIN_PORT = $ADMIN_PORT
-EOF
-    
-    # 保存 .env
-    cat > /opt/pppoe-activation/.env <<EOF
-# PPPOE 激活系统 Docker 环境变量配置
-# Docker 容器自动生成于 $(date)
-
-# 应用端口配置
-APP_PORT=$APP_PORT
-ADMIN_PORT=$ADMIN_PORT
-
-# 网卡配置（使用空格分隔多个网卡）
-NETWORK_INTERFACES=$NETWORK_INTERFACES
-
-# 时区配置
-TZ=${TZ:-Asia/Shanghai}
-
-# 数据持久化路径配置
-DATA_PATH=./data
-LOGS_PATH=./logs
-DB_PATH=./database.db
-INSTANCE_PATH=./instance
-EOF
-    
-    # 创建初始化标记
-    touch /opt/pppoe-activation/.initialized
-    
-    log_success "配置文件生成完成"
-}
-
-# 配置网络接口
-configure_network() {
-    log_info "配置网络接口..."
-    
-    IFS=' ' read -ra INTERFACES <<< "$NETWORK_INTERFACES"
-    for interface in "${INTERFACES[@]}"; do
-        # 检查接口是否存在
-        if ip link show "$interface" &>/dev/null; then
-            # 检查接口状态
-            if ip link show "$interface" | grep -q "state DOWN"; then
-                log_warning "接口 $interface 状态为DOWN，跳过"
-                continue
-            fi
-            
-            # 启用接口
-            if ip link set "$interface" up &>/dev/null; then
-                log_info "接口 $interface 已启用"
-            else
-                log_error "无法启用接口 $interface"
-            fi
-        else
-            log_warning "接口 $interface 不存在"
-        fi
-    done
 }
 
 # 初始化数据库
@@ -166,68 +63,115 @@ init_database() {
 configure_ppp_device() {
     log_info "配置PPP设备..."
     
-    # 修改/dev/ppp设备权限，让所有用户可以访问
+    # 检查/dev/ppp设备是否存在
     if [[ -c /dev/ppp ]]; then
         chmod 666 /dev/ppp
         log_success "PPP设备权限已修改为666"
     else
-        log_warning "PPP设备不存在"
+        log_warning "PPP设备不存在，尝试创建..."
+        # 创建PPP设备（主设备号108，次设备号0）
+        if mknod /dev/ppp c 108 0 2>/dev/null; then
+            chmod 666 /dev/ppp
+            log_success "PPP设备创建成功并设置权限为666"
+        else
+            log_error "PPP设备创建失败，PPPoE拨号可能无法工作"
+        fi
     fi
 }
 
-# 启动服务
-start_services() {
-    log_info "启动服务..."
+# 配置VLAN接口（从数据库读取配置）
+configure_vlan_interfaces() {
+    log_info "配置VLAN接口..."
     
-    # 启动用户激活服务
-    log_info "启动用户激活服务 (端口 $APP_PORT)..."
-    python3 app.py &
-    APP_PID=$!
+    # 从数据库读取VLAN配置
+    VLAN_CONFIG=$(python3 -c "
+import sys
+sys.path.insert(0, '/opt/pppoe-activation')
+from sqlalchemy import create_engine, text
+engine = create_engine('sqlite:////opt/pppoe-activation/instance/database.db')
+with engine.connect() as conn:
+    result = conn.execute(text('SELECT net_mode, base_interface, vlan_id FROM network_config'))
+    row = result.fetchone()
+    if row:
+        net_mode, base_interface, vlan_id = row
+        if net_mode == 'vlan' and vlan_id and base_interface:
+            print(f'{net_mode}|{base_interface}|{vlan_id}')
+        else:
+            print('')
+    else:
+        print('')
+" 2>/dev/null)
     
-    # 启动管理后台服务（以root用户运行，确保可以访问数据库）
-    log_info "启动管理后台服务 (端口 $ADMIN_PORT)..."
+    if [[ -n "$VLAN_CONFIG" ]]; then
+        IFS='|' read -r net_mode base_interface vlan_id <<< "$VLAN_CONFIG"
+        if [[ -n "$net_mode" && "$net_mode" == "vlan" && -n "$vlan_id" && -n "$base_interface" ]]; then
+            # 先删除旧的 VLAN 子接口（避免重复）
+            log_info "清理旧的 VLAN 子接口..."
+            ip -j link show | python3 -c "
+import sys, json
+interfaces_data = json.load(sys.stdin)
+for iface_data in interfaces_data:
+    ifname = iface_data.get('ifname', '')
+    # 检查是否为 VLAN 子接口（格式：base_interface.vlan_id）
+    if '.' in ifname and ifname.startswith('$base_interface'):
+        print(ifname)
+" 2>/dev/null | while read -r old_vlan_if; do
+                if [[ -n "$old_vlan_if" ]]; then
+                    ip link delete "$old_vlan_if" 2>/dev/null && log_info "删除旧的 VLAN 子接口: $old_vlan_if" || true
+                fi
+            done
+            
+            log_info "创建VLAN子接口: $base_interface.$vlan_id"
+            # 按逗号分隔VLAN ID
+            IFS=',' read -ra VLAN_IDS <<< "$vlan_id"
+            for vlan_id_str in "${VLAN_IDS[@]}"; do
+                vlan_id_str=$(echo "$vlan_id_str" | xargs)
+                if [[ -n "$vlan_id_str" ]]; then
+                    vlan_if="${base_interface}.${vlan_id_str}"
+                    # 检查VLAN子接口是否已存在
+                    if ip link show "$vlan_if" &>/dev/null; then
+                        log_info "VLAN子接口 $vlan_if 已存在"
+                    else
+                        # 创建VLAN子接口
+                        if ip link add link "$base_interface" name "$vlan_if" type vlan id "$vlan_id_str" 2>/dev/null; then
+                            ip link set "$vlan_if" up
+                            log_success "VLAN子接口 $vlan_if 创建成功"
+                        else
+                            log_error "创建VLAN子接口 $vlan_if 失败"
+                        fi
+                    fi
+                fi
+            done
+        fi
+    else
+        log_info "未找到VLAN配置"
+    fi
+}
+
+# 启动主服务
+start_service() {
+    log_info "启动主服务..."
+    
+    cd /opt/pppoe-activation
+    
+    # 启动配置管理服务（端口9999）
+    log_info "启动配置管理服务 (端口 9999)..."
+    python3 init_config.py &
+    
+    # 启动管理后台服务（端口8081）
+    log_info "启动管理后台服务 (端口 8081)..."
     python3 dashboard.py &
-    ADMIN_PID=$!
     
-    # 等待服务启动
-    sleep 5
-    
-    # 检查服务状态
-    if kill -0 $APP_PID 2>/dev/null; then
-        log_success "用户激活服务启动成功 (PID: $APP_PID)"
-    else
-        log_error "用户激活服务启动失败"
-        exit 1
-    fi
-    
-    if kill -0 $ADMIN_PID 2>/dev/null; then
-        log_success "管理后台服务启动成功 (PID: $ADMIN_PID)"
-    else
-        log_error "管理后台服务启动失败"
-        exit 1
-    fi
-    
-    # 保存 PID 到文件
-    echo $APP_PID > /opt/pppoe-activation/app.pid
-    echo $ADMIN_PID > /opt/pppoe-activation/admin.pid
+    # 启动拨号服务（端口80，前台运行）
+    log_info "启动拨号服务 (端口 $APP_PORT)..."
+    # 以root用户身份运行app.py（需要绑定80端口）
+    exec python3 app.py
 }
 
 # 信号处理
 signal_handler() {
     log_info "接收到停止信号，正在关闭服务..."
-    
-    # 停止服务
-    if [[ -f /opt/pppoe-activation/app.pid ]]; then
-        APP_PID=$(cat /opt/pppoe-activation/app.pid)
-        kill $APP_PID 2>/dev/null || true
-        log_info "用户激活服务已停止"
-    fi
-    
-    if [[ -f /opt/pppoe-activation/admin.pid ]]; then
-        ADMIN_PID=$(cat /opt/pppoe-activation/admin.pid)
-        kill $ADMIN_PID 2>/dev/null || true
-        log_info "管理后台服务已停止"
-    fi
+    exit 0
 }
 
 # 设置信号处理
@@ -243,16 +187,11 @@ show_startup_info() {
     echo "📌 访问地址："
     echo "   用户激活页面: http://localhost:$APP_PORT"
     echo "   管理后台页面: http://localhost:$ADMIN_PORT"
+    echo "   配置管理页面: http://localhost:9999"
     echo ""
     echo "📌 默认管理员账号："
     echo "   用户名: admin"
     echo "   密码: admin123"
-    echo ""
-    echo "📌 配置的网络接口："
-    IFS=' ' read -ra INTERFACES <<< "$NETWORK_INTERFACES"
-    for interface in "${INTERFACES[@]}"; do
-        echo "   - $interface"
-    done
     echo ""
     echo "📌 容器信息："
     echo "   容器ID: $(hostname)"
@@ -271,15 +210,13 @@ main() {
     echo ""
     
     check_env_vars
-    generate_config
-    configure_network
-    configure_ppp_device
     init_database
-    start_services
+    configure_ppp_device
+    configure_vlan_interfaces
     show_startup_info
     
-    # 保持容器运行
-    wait
+    # 启动主服务（阻塞）
+    start_service
 }
 
 # 执行主函数

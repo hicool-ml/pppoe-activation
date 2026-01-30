@@ -37,7 +37,7 @@ class NetworkConfig(Base):
     id = Column(Integer, primary_key=True, index=True)
     net_mode = Column(String(20), default='physical')  # physical | vlan
     base_interface = Column(String(20))  # enp3s0
-    vlan_id = Column(Integer, nullable=True)  # 100（可为空）
+    vlan_id = Column(String(100), nullable=True)  # 100 或 100,101,102（可为空）
     created_at = Column(String(30))  # 创建时间
     updated_at = Column(String(30))  # 更新时间
     
@@ -49,8 +49,54 @@ class NetworkConfig(Base):
             str: 最终接口名（如 enp3s0 或 enp3s0.100）
         """
         if self.net_mode == "vlan" and self.vlan_id:
-            return f"{self.base_interface}.{self.vlan_id}"
+            # 如果有多个 VLAN ID（逗号分隔），返回第一个
+            vlan_ids = str(self.vlan_id).split(',')
+            return f"{self.base_interface}.{vlan_ids[0]}"
         return self.base_interface
+    
+    def vlan_id_list(self) -> list:
+        """
+        获取 VLAN ID 列表
+        
+        Returns:
+            list: VLAN ID 列表（例如：[100, 101, 102]）
+        """
+        if not self.vlan_id:
+            return []
+        
+        # 解析 VLAN ID 字符串（支持逗号分隔）
+        vlan_ids = []
+        for part in str(self.vlan_id).split(','):
+            part = part.strip()
+            if part:
+                try:
+                    vlan_ids.append(int(part))
+                except ValueError:
+                    pass
+        
+        return vlan_ids
+
+
+class Config(Base):
+    """系统配置表"""
+    __tablename__ = 'config'
+    
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(50), unique=True, nullable=False)  # 配置项名称
+    value = Column(String(500))  # 配置项值
+
+
+class AdminUser(Base):
+    """管理员用户表"""
+    __tablename__ = 'admin_users'
+    
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String(50), unique=True, nullable=False)
+    password_hash = Column(String(64))  # SHA256
+    salt = Column(String(120))  # salt字段
+    role = Column(String(20), default='admin')  # admin 或 super
+    created_at = Column(String(30))  # 创建时间
+
 
 def init_db():
     """创建表（如果不存在）"""

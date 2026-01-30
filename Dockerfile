@@ -25,6 +25,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     sudo \
     # 内核模块管理
     kmod \
+    # 用户切换工具（用于以非root用户运行应用）
+    gosu \
     # 清理缓存
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* \

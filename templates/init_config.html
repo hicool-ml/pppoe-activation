@@ -232,11 +232,11 @@
 <body>
     <div class="form-wrapper">
         <div class="tabs">
-            <a href="/dashboard" class="tab">📊 仪表盘</a>
-            <a href="/logs" class="tab">📝 激活日志</a>
+            <a href="http://{{ request.host.split(':')[0] }}:8081/dashboard" class="tab">📊 仪表盘</a>
+            <a href="http://{{ request.host.split(':')[0] }}:8081/logs" class="tab">📝 激活日志</a>
             <a href="/config" class="tab active">⚙️ 系统配置</a>
-            <a href="/admin_list" class="tab">👥 管理员管理</a>
-            <a href="/logout" class="tab">🚪 登出</a>
+            <a href="http://{{ request.host.split(':')[0] }}:8081/admin_list" class="tab">👥 管理员管理</a>
+            <a href="http://{{ request.host.split(':')[0] }}:8081/logout" class="tab">🚪 登出</a>
         </div>
         
         <div class="form-container">
@@ -280,14 +280,16 @@
                         
                         <div class="form-group" id="vlan_config_group" style="display: none;">
                             <label for="vlan_id">VLAN ID：</label>
-                            <input type="number" id="vlan_id" name="vlan_id" min="1" max="4094"
-                                   value="{{ current_config.vlan_id if current_config.vlan_id else 100 }}">
-                            <div class="hint">VLAN ID范围：1-4094（例如：100, 200, 300）</div>
+                            <input type="text" id="vlan_id" name="vlan_id" placeholder="例如：2000 或 2000-2005 或 2000,2001,2002"
+                                   value="{{ current_config.vlan_id if current_config.vlan_id else '' }}">
+                            <div class="hint">支持格式：单个ID（2000）、范围（2000-2005）、逗号分隔（2000,2001,2002）或混合（2000,2002-2005,2007）</div>
                         </div>
                         
-                        <label>选择可用的网卡：</label>
-                        <div class="hint">系统已检测到以下网卡，请选择用于PPPoE拨号的网卡</div>
-                        <div class="interfaces-grid">
+                         <label>选择可用的网卡：</label>
+                         <div class="hint" id="interface_hint">
+                             系统已检测到以下网卡，请选择用于PPPoE拨号的网卡
+                         </div>
+                         <div class="interfaces-grid">
                             {% for iface in available_interfaces %}
                             <div class="interface-item"
                                  onclick="toggleInterface(this)">
@@ -377,18 +379,24 @@
                     </div>
                 </div>
                 
-                <!-- 提交按钮 -->
-                <div class="button-group">
-                    <button type="button" class="btn-secondary" onclick="location.reload()">
-                        🔄 刷新网卡列表
-                    </button>
-                    <button type="button" class="btn-secondary" onclick="viewConfig()">
-                        👁️ 查看当前配置
-                    </button>
-                    <button type="submit" class="btn-success">
-                        💾 保存配置并重启
-                    </button>
-                </div>
+                 <!-- 提交按钮 -->
+                 <div class="button-group">
+                     <button type="button" class="btn-secondary" onclick="location.reload()">
+                         🔄 刷新网卡列表
+                     </button>
+                     <button type="button" class="btn-secondary" onclick="viewConfig()">
+                         👁️ 查看当前配置
+                     </button>
+                     {% if current_config.is_super %}
+                     <button type="submit" class="btn-success">
+                         💾 保存配置并重启
+                     </button>
+                     {% else %}
+                     <button type="button" class="btn-secondary" disabled style="opacity: 0.6; cursor: not-allowed;">
+                         🔒 只有超级管理员才能修改配置
+                     </button>
+                     {% endif %}
+                 </div>
             </form>
         </div>
     </div>
@@ -402,10 +410,13 @@
         
         function toggleNetMode(mode) {
             const vlanConfigGroup = document.getElementById('vlan_config_group');
+            const interfaceHint = document.getElementById('interface_hint');
             if (mode === 'vlan') {
                 vlanConfigGroup.style.display = 'block';
+                interfaceHint.innerHTML = '<strong>VLAN 模式配置流程：</strong>① 选择一个物理网卡（如 enp7s0）→ ② 指定 VLAN ID（如 2000-2005）→ ③ 系统自动创建所有 VLAN 子接口 → ④ 系统自动选择所有 VLAN 子接口参与拨号';
             } else {
                 vlanConfigGroup.style.display = 'none';
+                interfaceHint.innerHTML = '系统已检测到以下网卡，请选择用于PPPoE拨号的网卡';
             }
         }
 

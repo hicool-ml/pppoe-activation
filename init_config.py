@@ -10,12 +10,64 @@ import os
 import sys
 import json
 import subprocess
-from flask import Flask, render_template, request, jsonify, redirect, url_for
+import hashlib
+import secrets
+from flask import Flask, render_template, request, jsonify, redirect, url_for, session
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from models import NetworkConfig
+from models import NetworkConfig, AdminUser
 
 app = Flask(__name__)
+app.secret_key = 'your-super-secret-key-change-it-please'  # 请修改！
+
+
+# =============================
+# 登录/登出
+# =============================
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    """超级管理员登录"""
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+
+        # 使用pbkdf2_hmac加密
+        session_db = SessionLocal()
+        try:
+            user = session_db.query(AdminUser).filter_by(username=username).first()
+            if user and user.role == 'super':  # 只允许super角色登录
+                pwd_hash = hashlib.pbkdf2_hmac(
+                    'sha256',
+                    password.encode(),
+                    user.salt.encode() if hasattr(user, 'salt') else b'',
+                    100000
+                ).hex()
+                if pwd_hash == user.password_hash:
+                    session['super_admin'] = user.username
+                    return redirect('/')
+        finally:
+            session_db.close()
+
+        return render_template('admin/login.html', error="用户名或密码错误或权限不足")
+    return render_template('admin/login.html')
+
+
+@app.route('/logout')
+def logout():
+    """登出"""
+    session.pop('super_admin', None)
+    return redirect('/login')
+
+
+def require_super_admin(f):
+    """装饰器：要求超级管理员权限"""
+    def wrapper(*args, **kwargs):
+        if 'super_admin' not in session:
+            return redirect('/login')
+        return f(*args, **kwargs)
+    wrapper.__name__ = f.__name__
+    return wrapper
 
 # 独立的数据库会话工厂（不依赖 app.py）
 DB_PATH = '/opt/pppoe-activation/instance/database.db'
@@ -134,8 +186,20 @@ def get_current_config():
         if net_config:
             config['net_mode'] = net_config.net_mode
             config['vlan_id'] = net_config.vlan_id or ''
-            # 如果数据库中有 base_interface，也读取它
-            if net_config.base_interface:
+            
+            # 根据网络模式生成接口列表
+            if net_config.net_mode == 'vlan' and net_config.vlan_id and net_config.base_interface:
+                # VLAN 模式：只返回 VLAN 子接口列表
+                vlan_ids = net_config.vlan_id.split(',')
+                vlan_interfaces = []
+                for vlan_id in vlan_ids:
+                    vlan_id = vlan_id.strip()
+                    if vlan_id:
+                        vlan_interfaces.append(f"{net_config.base_interface}.{vlan_id}")
+                config['interfaces'] = vlan_interfaces
+                print(f"VLAN 模式：生成的 VLAN 子接口列表: {vlan_interfaces}")
+            elif net_config.base_interface:
+                # 物理模式：返回物理网卡
                 config['interfaces'] = [net_config.base_interface]
         session.close()
     except Exception as e:
@@ -186,26 +250,121 @@ def ensure_vlan_interface(base, vlan_id):
         raise RuntimeError(f"创建 VLAN 子接口失败: {str(e)}")
 
 
+def parse_vlan_ids(vlan_id_str):
+    """
+    解析 VLAN ID 字符串，支持多种格式
+    
+    支持的格式：
+    1. 单个 VLAN ID：2000
+    2. 逗号分隔的多个 VLAN ID：2000,2001,2002
+    3. VLAN ID 范围：2000-2005
+    4. 混合格式：2000,2002-2005,2007
+    
+    Args:
+        vlan_id_str: VLAN ID 字符串
+    
+    Returns:
+        list: VLAN ID 列表
+    
+    Raises:
+        ValueError: 如果格式不正确或 VLAN ID 超出范围
+    """
+    vlan_ids = []
+    
+    # 按逗号分隔
+    parts = vlan_id_str.split(',')
+    
+    for part in parts:
+        part = part.strip()
+        if not part:
+            continue
+        
+        # 检查是否为范围格式（例如：2000-2005）
+        if '-' in part:
+            try:
+                start, end = part.split('-')
+                start = int(start.strip())
+                end = int(end.strip())
+                
+                if start < 1 or start > 4094:
+                    raise ValueError(f"VLAN ID {start} 超出范围（1-4094）")
+                if end < 1 or end > 4094:
+                    raise ValueError(f"VLAN ID {end} 超出范围（1-4094）")
+                
+                if start > end:
+                    raise ValueError(f"VLAN 范围 {start}-{end} 无效（起始值大于结束值）")
+                
+                # 添加范围内的所有 VLAN ID
+                vlan_ids.extend(range(start, end + 1))
+            except ValueError as e:
+                if "invalid literal" in str(e):
+                    raise ValueError(f"VLAN ID 范围格式不正确：{part}（正确格式：2000-2005）")
+                raise
+        else:
+            # 单个 VLAN ID
+            try:
+                vlan_id = int(part)
+                if vlan_id < 1 or vlan_id > 4094:
+                    raise ValueError(f"VLAN ID {vlan_id} 超出范围（1-4094）")
+                vlan_ids.append(vlan_id)
+            except ValueError as e:
+                if "invalid literal" in str(e):
+                    raise ValueError(f"VLAN ID 格式不正确：{part}（必须为数字）")
+                raise
+    
+    # 去重并排序
+    vlan_ids = sorted(list(set(vlan_ids)))
+    
+    return vlan_ids
+
+
 def save_config(data):
     """保存配置"""
     # 后端校验：VLAN ID 必须在 1-4094 之间
     net_mode = data.get('net_mode', 'physical')
+    interfaces = data.get('interfaces', [])
+    
     if net_mode == "vlan":
+        # VLAN 模式：用户选择物理网卡 + 指定 VLAN ID
+        # 系统自动创建所有 VLAN 子接口，并自动选择所有 VLAN 子接口参与拨号
+        
         vlan_id_str = data.get('vlan_id', '').strip()
         if not vlan_id_str:
             raise ValueError("VLAN 模式需要指定 VLAN ID")
         
+        # 解析 VLAN ID（支持范围和逗号分隔格式）
         try:
-            vlan_id = int(vlan_id_str)
-        except ValueError:
-            raise ValueError("VLAN ID 必须是数字")
+            vlan_ids = parse_vlan_ids(vlan_id_str)
+            if not vlan_ids:
+                raise ValueError("未找到有效的 VLAN ID")
+        except ValueError as e:
+            raise e
         
-        if vlan_id < 1 or vlan_id > 4094:
-            raise ValueError("VLAN ID 必须在 1-4094 之间")
+        # 确定物理网卡
+        base_interface = None
+        if interfaces:
+            # 从用户选择的接口中确定物理网卡
+            first_interface = interfaces[0]
+            if '.' in first_interface:
+                # 如果是 VLAN 子接口，提取物理网卡部分
+                base_interface = first_interface.split('.')[0]
+            else:
+                # 如果是物理网卡，直接使用
+                base_interface = first_interface
+        else:
+            raise ValueError("VLAN 模式需要选择至少一个物理网卡")
         
-        data['vlan_id'] = vlan_id  # 转换为整数
+        # 保存为逗号分隔的字符串
+        data['vlan_id'] = ','.join(map(str, vlan_ids))
+        # 保存物理网卡到 base_interface
+        data['base_interface'] = base_interface
+        
+        print(f"VLAN 模式：物理网卡={base_interface}, VLAN ID={data['vlan_id']}")
     else:
-        data['vlan_id'] = None  # 物理模式不需要 VLAN ID
+        # 物理模式：直接使用用户选择的接口
+        data['vlan_id'] = None
+        data['base_interface'] = interfaces[0] if interfaces else 'eth0'
+        print(f"物理模式：物理网卡={data['base_interface']}")
     
     # 保存 config.py
     config_content = f"""# PPPOE 激活系统配置文件
@@ -219,7 +378,7 @@ DATABASE_PATH = '/opt/pppoe-activation/instance/database.db'
 # 网卡配置（用户配置）
 # 注意：NETWORK_INTERFACES 仅用于初始化默认值展示，不参与运行期逻辑
 # 运行期网络配置请参考数据库中的 NetworkConfig 表
-NETWORK_INTERFACES = {json.dumps(data.get('interfaces', ['eth0']))}
+NETWORK_INTERFACES = {json.dumps(interfaces if interfaces else ['eth0'])}
 
 # 日志目录
 PPP_LOG_DIR = f'{{BASE_DIR}}/logs'
@@ -243,7 +402,7 @@ ADMIN_PORT={data.get('admin_port', 8081)}
 # 网卡配置（使用空格分隔多个网卡）
 # 注意：NETWORK_INTERFACES 仅用于 docker-compose 兼容性，主程序不得读取
 # 运行期网络配置请参考数据库中的 NetworkConfig 表
-NETWORK_INTERFACES={' '.join(data.get('interfaces', ['eth0']))}
+NETWORK_INTERFACES={' '.join(interfaces if interfaces else ['eth0'])}
 
 # 时区配置
 TZ={data.get('tz', 'Asia/Shanghai')}
@@ -270,16 +429,67 @@ VLAN_ID={data.get('vlan_id', '')}
             net_config = NetworkConfig()
         
         net_config.net_mode = data.get('net_mode', 'physical')
-        net_config.base_interface = data.get('interfaces', ['eth0'])[0] if data.get('interfaces') else 'eth0'
+        net_config.base_interface = data.get('base_interface', 'eth0')
         net_config.vlan_id = data.get('vlan_id') or None
         session.add(net_config)
         session.commit()
-        print(f"网络配置已保存到数据库: net_mode={net_config.net_mode}, vlan_id={net_config.vlan_id}")
+        print(f"网络配置已保存到数据库: net_mode={net_config.net_mode}, base_interface={net_config.base_interface}, vlan_id={net_config.vlan_id}")
         
-        # 如果是 VLAN 模式，创建 VLAN 子接口
+        # 如果是 VLAN 模式，创建所有 VLAN 子接口
         if net_config.net_mode == "vlan" and net_config.vlan_id:
-            ensure_vlan_interface(net_config.base_interface, net_config.vlan_id)
-            print(f"VLAN 子接口已创建: {net_config.base_interface}.{net_config.vlan_id}")
+            # 先删除旧的 VLAN 子接口（避免重复）
+            try:
+                # 获取所有 VLAN 子接口
+                result = subprocess.run(['ip', '-j', 'link', 'show'], capture_output=True, text=True, check=True)
+                interfaces_data = json.loads(result.stdout)
+                
+                for iface_data in interfaces_data:
+                    ifname = iface_data.get('ifname', '')
+                    # 检查是否为 VLAN 子接口（格式：base_interface.vlan_id）
+                    if '.' in ifname and ifname.startswith(net_config.base_interface):
+                        # 删除旧的 VLAN 子接口
+                        subprocess.run(['ip', 'link', 'delete', ifname], check=False)
+                        print(f"删除旧的 VLAN 子接口: {ifname}")
+            except Exception as e:
+                print(f"删除旧的 VLAN 子接口失败: {e}")
+            
+            # 获取所有 VLAN ID（用于创建子接口）
+            vlan_ids = net_config.vlan_id.split(',')
+            if vlan_ids:
+                created_count = 0
+                for vlan_id_str in vlan_ids:
+                    vlan_id_str = vlan_id_str.strip()
+                    if not vlan_id_str:
+                        continue
+                    try:
+                        ensure_vlan_interface(net_config.base_interface, vlan_id_str)
+                        print(f"VLAN 子接口已创建: {net_config.base_interface}.{vlan_id_str}")
+                        created_count += 1
+                    except Exception as e:
+                        print(f"创建 VLAN 子接口 {net_config.base_interface}.{vlan_id_str} 失败: {e}")
+                        # 不影响配置保存，只是记录错误
+                print(f"共创建了 {created_count} 个 VLAN 子接口")
+        else:
+            # 如果是物理接口模式，删除所有 VLAN 子接口
+            try:
+                # 获取所有 VLAN 子接口
+                result = subprocess.run(['ip', '-j', 'link', 'show'], capture_output=True, text=True, check=True)
+                interfaces_data = json.loads(result.stdout)
+                
+                deleted_count = 0
+                for iface_data in interfaces_data:
+                    ifname = iface_data.get('ifname', '')
+                    # 检查是否为 VLAN 子接口（包含 '.' 的接口）
+                    if '.' in ifname:
+                        # 删除 VLAN 子接口
+                        subprocess.run(['ip', 'link', 'delete', ifname], check=False)
+                        print(f"删除 VLAN 子接口: {ifname}")
+                        deleted_count += 1
+                
+                if deleted_count > 0:
+                    print(f"共删除了 {deleted_count} 个 VLAN 子接口（切换到物理接口模式）")
+            except Exception as e:
+                print(f"删除 VLAN 子接口失败: {e}")
         
         session.close()
     except Exception as e:
@@ -302,16 +512,20 @@ VLAN_ID={data.get('vlan_id', '')}
 
 
 @app.route('/')
+@require_super_admin
 def index():
     """配置页面"""
     available_interfaces = get_available_interfaces()
     current_config = get_current_config()
+    # 添加is_super标志（因为9999端口只允许super角色访问，所以始终为True）
+    current_config['is_super'] = True
     return render_template('init_config.html',
                        available_interfaces=available_interfaces,
                        current_config=current_config)
 
 
 @app.route('/api/interfaces')
+@require_super_admin
 def api_interfaces():
     """获取可用网卡列表"""
     interfaces = get_available_interfaces()
@@ -319,6 +533,7 @@ def api_interfaces():
 
 
 @app.route('/api/config', methods=['GET', 'POST'])
+@require_super_admin
 def api_config():
     """获取或保存配置"""
     if request.method == 'GET':
@@ -334,6 +549,7 @@ def api_config():
 
 
 @app.route('/api/restart-status')
+@require_super_admin
 def restart_status():
     """获取重启状态"""
     try:
@@ -346,6 +562,7 @@ def restart_status():
 
 
 @app.route('/save', methods=['POST'])
+@require_super_admin
 def save():
     """保存配置并重启"""
     try:
@@ -362,22 +579,56 @@ def save():
             'vlan_id': request.form.get('vlan_id', '')
         }
         
+        print(f"接收到配置数据: net_mode={data['net_mode']}, vlan_id='{data['vlan_id']}'")
+        
         save_config(data)
         
         return render_template('init_success.html', config=data)
     except Exception as e:
+        print(f"保存配置失败: {e}")
+        import traceback
+        traceback.print_exc()
+        available_interfaces = get_available_interfaces()
+        current_config = get_current_config()
+        # 添加is_super标志（因为9999端口只允许super角色访问，所以始终为True）
+        current_config['is_super'] = True
         return render_template('init_config.html',
-                           available_interfaces=get_available_interfaces(),
-                           current_config=get_current_config(),
+                           available_interfaces=available_interfaces,
+                           current_config=current_config,
                            error=str(e))
 
 
 if __name__ == '__main__':
-    # 检查是否已初始化
-    if os.path.exists(INIT_FLAG_FILE):
-        print("系统已初始化，请使用 docker-compose restart 重启服务")
-        sys.exit(0)
+    # 创建root超级管理员（如果不存在）
+    session_db = SessionLocal()
+    try:
+        root_user = session_db.query(AdminUser).filter_by(username='root').first()
+        if not root_user:
+            # 创建root超级管理员
+            salt = secrets.token_hex(16)
+            pwd_hash = hashlib.pbkdf2_hmac(
+                'sha256',
+                'root123'.encode(),
+                salt.encode(),
+                100000
+            ).hex()
+            root_user = AdminUser(username='root', password_hash=pwd_hash, salt=salt, role='super')
+            session_db.add(root_user)
+            session_db.commit()
+            print("✅ 默认超级管理员创建成功：root / root123")
+        else:
+            # 确保root用户是super角色
+            if root_user.role != 'super':
+                root_user.role = 'super'
+                session_db.commit()
+                print("✅ root用户已升级为超级管理员")
+    except Exception as e:
+        print(f"❌ 创建root超级管理员失败: {e}")
+    finally:
+        session_db.close()
     
-    print("初始化配置服务启动中...")
+    # 不再检查是否已初始化，持续运行配置服务
+    print("配置服务启动中...")
     print("请在浏览器中访问 http://localhost:9999 进行配置")
+    print("超级管理员账号：root / root123")
     app.run(host='0.0.0.0', port=9999, debug=False)

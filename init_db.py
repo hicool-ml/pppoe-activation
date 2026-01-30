@@ -36,6 +36,17 @@ class Activation(db.Model):
     error_message = db.Column(db.Text)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
 
+class NetworkConfig(db.Model):
+    """网络配置表（运行时配置）"""
+    __tablename__ = 'network_config'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    net_mode = db.Column(db.String(20), default='physical')  # physical | vlan
+    base_interface = db.Column(db.String(20))  # enp3s0
+    vlan_id = db.Column(db.String(100), nullable=True)  # 100 或 100,101,102（可为空）
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)  # 创建时间
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow)  # 更新时间
+
 def create_database():
     """创建数据库文件和表，并添加默认管理员"""
     # 只在数据库不存在时才创建

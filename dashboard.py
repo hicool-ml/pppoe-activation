@@ -1,6 +1,6 @@
 # dashboard.py
 from flask import Flask, jsonify, render_template, request, make_response, redirect, url_for, session
-from models import SessionLocal, ActivationLog, init_db
+from models import SessionLocal, ActivationLog, NetworkConfig, AdminUser, Config, init_db
 from sync import sync_logs
 from config import ADMIN_PORT
 import logging
@@ -24,38 +24,28 @@ app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:////opt/pppoe-activation/instanc
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
-# ========== 数据库模型 ==========
-class AdminUser(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(50), unique=True)
-    password_hash = db.Column(db.String(64))  # SHA256
-    salt = db.Column(db.String(120))  # 添加salt字段
-    role = db.Column(db.String(20), default='admin')  # admin 或 super
-    created_at = db.Column(db.DateTime, default=db.func.now())
-
-class Config(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(50), unique=True)
-    value = db.Column(db.String(500))
-    updated_at = db.Column(db.DateTime, default=db.func.now())
-
 # ========== 启动时创建表和默认管理员 ==========
 import secrets
+from datetime import datetime
 with app.app_context():
-    db.create_all()
-    if AdminUser.query.count() == 0:
-        # 使用pbkdf2_hmc加密（与init_db.py一致）
-        salt = secrets.token_hex(16)
-        pwd_hash = hashlib.pbkdf2_hmac(
-            'sha256',
-            'admin123'.encode(),
-            salt.encode(),
-            100000
-        ).hex()
-        admin = AdminUser(username='admin', password_hash=pwd_hash, salt=salt)
-        db.session.add(admin)
-        db.session.commit()
-        print("✅ 默认管理员创建成功：admin / admin123")
+    init_db()
+    session_db = SessionLocal()
+    try:
+        if session_db.query(AdminUser).count() == 0:
+            # 使用pbkdf2_hmc加密（与init_db.py一致）
+            salt = secrets.token_hex(16)
+            pwd_hash = hashlib.pbkdf2_hmac(
+                'sha256',
+                'admin123'.encode(),
+                salt.encode(),
+                100000
+            ).hex()
+            admin = AdminUser(username='admin', password_hash=pwd_hash, salt=salt, role='admin', created_at=str(datetime.now()))
+            session_db.add(admin)
+            session_db.commit()
+            print("✅ 默认管理员创建成功：admin / admin123")
+    finally:
+        session_db.close()
 
 # ISP 显示映射
 ISP_DISPLAY = {
@@ -98,17 +88,22 @@ def login():
         password = request.form.get('password')
 
         # 使用pbkdf2_hmac加密（与init_db.py一致）
-        user = AdminUser.query.filter_by(username=username).first()
-        if user:
-            pwd_hash = hashlib.pbkdf2_hmac(
-                'sha256',
-                password.encode(),
-                user.salt.encode() if hasattr(user, 'salt') else b'',
-                100000
-            ).hex()
-            if pwd_hash == user.password_hash:
-                session['admin'] = user.username
-                return redirect('/dashboard')
+        session_db = SessionLocal()
+        try:
+            user = session_db.query(AdminUser).filter_by(username=username).first()
+            if user:
+                pwd_hash = hashlib.pbkdf2_hmac(
+                    'sha256',
+                    password.encode(),
+                    user.salt.encode() if hasattr(user, 'salt') else b'',
+                    100000
+                ).hex()
+                if pwd_hash == user.password_hash:
+                    session['admin'] = user.username
+                    session['admin_role'] = user.role  # 保存用户角色
+                    return redirect('/dashboard')
+        finally:
+            session_db.close()
 
         return render_template('admin/login.html', error="用户名或密码错误")
     return render_template('admin/login.html')
@@ -117,6 +112,7 @@ def login():
 @app.route('/logout')
 def logout():
     session.pop('admin', None)
+    session.pop('admin_role', None)
     return redirect('/login')
 
 
@@ -148,7 +144,11 @@ def admin_logs():
                 self.next_num = page + 1 if self.has_next else None
 
         pagination = Pagination(logs, page, per_page, total)
-        return render_template('admin/logs.html', logs=pagination, ISP_DISPLAY=ISP_DISPLAY, ISP_COLORS=ISP_COLORS)
+        
+        # 获取当前用户角色
+        current_role = session.get('admin_role')
+        
+        return render_template('admin/logs.html', logs=pagination, ISP_DISPLAY=ISP_DISPLAY, ISP_COLORS=ISP_COLORS, current_role=current_role)
     finally:
         db.close()
 
@@ -257,16 +257,42 @@ def get_current_config():
         'instance_path': '/opt/pppoe-activation/instance',
         'app_port': 8080,
         'admin_port': 8081,
-        'tz': 'Asia/Shanghai'
+        'tz': 'Asia/Shanghai',
+        'net_mode': 'physical',
+        'vlan_id': ''
     }
     
-    # 从数据库读取配置
+    # 从NetworkConfig表读取网络配置
     try:
-        configs = Config.query.all()
+        session_db = SessionLocal()
+        net_config = session_db.query(NetworkConfig).first()
+        if net_config:
+            config['net_mode'] = net_config.net_mode
+            config['vlan_id'] = net_config.vlan_id or ''
+            
+            # 根据网络模式生成接口列表
+            if net_config.net_mode == 'vlan' and net_config.vlan_id and net_config.base_interface:
+                # VLAN 模式：返回所有 VLAN 子接口列表
+                vlan_ids = net_config.vlan_id.split(',')
+                vlan_interfaces = []
+                for vlan_id in vlan_ids:
+                    vlan_id = vlan_id.strip()
+                    if vlan_id:
+                        vlan_interfaces.append(f"{net_config.base_interface}.{vlan_id}")
+                config['interfaces'] = vlan_interfaces
+            elif net_config.base_interface:
+                # 物理模式：返回物理网卡
+                config['interfaces'] = [net_config.base_interface]
+        session_db.close()
+    except Exception as e:
+        print(f"从NetworkConfig表读取网络配置失败: {e}")
+    
+    # 从Config表读取其他配置
+    try:
+        session_db = SessionLocal()
+        configs = session_db.query(Config).all()
         for c in configs:
-            if c.name == 'NETWORK_INTERFACES':
-                config['interfaces'] = c.value.split() if c.value else []
-            elif c.name == 'DATA_PATH':
+            if c.name == 'DATA_PATH':
                 config['data_path'] = c.value
             elif c.name == 'LOGS_PATH':
                 config['logs_path'] = c.value
@@ -280,23 +306,136 @@ def get_current_config():
                 config['admin_port'] = int(c.value) if c.value else 8081
             elif c.name == 'TZ':
                 config['tz'] = c.value
+        session_db.close()
     except Exception as e:
-        print(f"从数据库读取配置失败: {e}")
+        print(f"从Config表读取配置失败: {e}")
     
     return config
+
+
+def parse_vlan_ids(vlan_id_str):
+    """
+    解析 VLAN ID 字符串，支持多种格式
+    
+    支持的格式：
+    1. 单个 VLAN ID：2000
+    2. 逗号分隔的多个 VLAN ID：2000,2001,2002
+    3. VLAN ID 范围：2000-2005
+    4. 混合格式：2000,2002-2005,2007
+    
+    Args:
+        vlan_id_str: VLAN ID 字符串
+    
+    Returns:
+        list: VLAN ID 列表
+    
+    Raises:
+        ValueError: 如果格式不正确或 VLAN ID 超出范围
+    """
+    vlan_ids = []
+    
+    # 按逗号分隔
+    parts = vlan_id_str.split(',')
+    
+    for part in parts:
+        part = part.strip()
+        if not part:
+            continue
+        
+        # 检查是否为范围格式（例如：2000-2005）
+        if '-' in part:
+            try:
+                start, end = part.split('-')
+                start = int(start.strip())
+                end = int(end.strip())
+                
+                if start < 1 or start > 4094:
+                    raise ValueError(f"VLAN ID {start} 超出范围（1-4094）")
+                if end < 1 or end > 4094:
+                    raise ValueError(f"VLAN ID {end} 超出范围（1-4094）")
+                
+                if start > end:
+                    raise ValueError(f"VLAN 范围 {start}-{end} 无效（起始值大于结束值）")
+                
+                # 添加范围内的所有 VLAN ID
+                vlan_ids.extend(range(start, end + 1))
+            except ValueError as e:
+                if "invalid literal" in str(e):
+                    raise ValueError(f"VLAN ID 范围格式不正确：{part}（正确格式：2000-2005）")
+                raise
+        else:
+            # 单个 VLAN ID
+            try:
+                vlan_id = int(part)
+                if vlan_id < 1 or vlan_id > 4094:
+                    raise ValueError(f"VLAN ID {vlan_id} 超出范围（1-4094）")
+                vlan_ids.append(vlan_id)
+            except ValueError as e:
+                if "invalid literal" in str(e):
+                    raise ValueError(f"VLAN ID 格式不正确：{part}（必须为数字）")
+                raise
+    
+    # 去重并排序
+    vlan_ids = sorted(list(set(vlan_ids)))
+    
+    return vlan_ids
 
 
 def save_config(data):
     """保存配置到数据库"""
     try:
-        # 保存网络接口配置
+        # 保存网络配置到NetworkConfig表
+        net_mode = data.get('net_mode', 'physical')
         interfaces = data.get('interfaces', [])
-        config = Config.query.filter_by(name='NETWORK_INTERFACES').first()
-        if config:
-            config.value = ' '.join(interfaces)
+        
+        if net_mode == "vlan":
+            # VLAN 模式：用户选择物理网卡 + 指定 VLAN ID
+            vlan_id_str = data.get('vlan_id', '').strip()
+            if not vlan_id_str:
+                raise ValueError("VLAN 模式需要指定 VLAN ID")
+            
+            # 解析 VLAN ID（支持范围和逗号分隔格式）
+            vlan_ids = parse_vlan_ids(vlan_id_str)
+            if not vlan_ids:
+                raise ValueError("未找到有效的 VLAN ID")
+            
+            # 确定物理网卡
+            base_interface = None
+            if interfaces:
+                first_interface = interfaces[0]
+                if '.' in first_interface:
+                    base_interface = first_interface.split('.')[0]
+                else:
+                    base_interface = first_interface
+            else:
+                raise ValueError("VLAN 模式需要选择至少一个物理网卡")
+            
+            # 保存为逗号分隔的字符串
+            vlan_id_str = ','.join(map(str, vlan_ids))
+            
+            # 保存到NetworkConfig表
+            net_config = NetworkConfig.query.first()
+            if not net_config:
+                net_config = NetworkConfig()
+            
+            net_config.net_mode = net_mode
+            net_config.base_interface = base_interface
+            net_config.vlan_id = vlan_id_str
+            db.session.add(net_config)
+            
+            print(f"VLAN 模式：物理网卡={base_interface}, VLAN ID={vlan_id_str}")
         else:
-            config = Config(name='NETWORK_INTERFACES', value=' '.join(interfaces))
-            db.session.add(config)
+            # 物理模式
+            net_config = NetworkConfig.query.first()
+            if not net_config:
+                net_config = NetworkConfig()
+            
+            net_config.net_mode = net_mode
+            net_config.base_interface = interfaces[0] if interfaces else 'eth0'
+            net_config.vlan_id = None
+            db.session.add(net_config)
+            
+            print(f"物理模式：物理网卡={net_config.base_interface}")
         
         # 保存应用端口配置
         for key, value in [('APP_PORT', data.get('app_port', 8080)), ('ADMIN_PORT', data.get('admin_port', 8081))]:
@@ -338,15 +477,21 @@ def save_config(data):
 
 @app.route('/config')
 def config_page():
-    """配置页面"""
+    """配置页面（只读）"""
     if 'admin' not in session:
         return redirect('/login')
 
-    available_interfaces = get_available_interfaces()
     current_config = get_current_config()
-    return render_template('init_config.html',
-                       available_interfaces=available_interfaces,
-                       current_config=current_config)
+    current_role = session.get('admin_role')
+    
+    # 如果是super角色，重定向到9999端口
+    if current_role == 'super':
+        return redirect('http://192.168.0.112:9999')
+    
+    # 使用只读模板显示配置
+    return render_template('configlist.html',
+                       current_config=current_config,
+                       current_role=current_role)
 
 
 @app.route('/api/interfaces')
@@ -382,6 +527,13 @@ def save():
     """保存配置"""
     if 'admin' not in session:
         return redirect('/login')
+    
+    # 只有super角色才能保存配置
+    if session.get('admin_role') != 'super':
+        return render_template('init_config.html',
+                           available_interfaces=get_available_interfaces(),
+                           current_config=get_current_config(),
+                           error='权限不足，只有超级管理员才能修改配置')
 
     if request.method == 'POST':
         try:
@@ -393,12 +545,14 @@ def save():
                 'instance_path': request.form.get('instance_path', './instance'),
                 'app_port': int(request.form.get('app_port', 8080)),
                 'admin_port': int(request.form.get('admin_port', 8081)),
-                'tz': request.form.get('tz', 'Asia/Shanghai')
+                'tz': request.form.get('tz', 'Asia/Shanghai'),
+                'net_mode': request.form.get('net_mode', 'physical'),
+                'vlan_id': request.form.get('vlan_id', '')
             }
 
             save_config(data)
 
-            return render_template('save.html', config=data)
+            return render_template('init_success.html', config=data)
         except Exception as e:
             return render_template('init_config.html',
                                available_interfaces=get_available_interfaces(),
@@ -406,7 +560,7 @@ def save():
                                error=str(e))
     else:
         # GET请求，返回保存成功页面
-        return render_template('save.html')
+        return render_template('init_success.html')
 
 
 # =============================
@@ -497,7 +651,10 @@ def dashboard():
     finally:
         db.close()
 
-    return render_template('dashboard.html', period=period, count_by_day=count_by_day, isp_count=isp_count, success_count=success_count, failure_count=failure_count)
+    # 获取当前用户角色
+    current_role = session.get('admin_role')
+    
+    return render_template('dashboard.html', period=period, count_by_day=count_by_day, isp_count=isp_count, success_count=success_count, failure_count=failure_count, current_role=current_role)
 
 
 @app.route('/admin_list')
@@ -506,8 +663,19 @@ def admin_list():
     if 'admin' not in session:
         return redirect('/login')
 
-    admins = AdminUser.query.all()
-    return render_template('admin_list.html', admins=admins)
+    session_db = SessionLocal()
+    try:
+        admins = session_db.query(AdminUser).all()
+        # 添加当前用户角色到模板上下文
+        current_role = session.get('admin_role')
+        
+        # 如果当前用户是admin角色，过滤掉super角色的用户
+        if current_role == 'admin':
+            admins = [a for a in admins if a.role != 'super']
+        
+        return render_template('admin_list.html', admins=admins, current_role=current_role)
+    finally:
+        session_db.close()
 
 
 @app.route('/admin_add', methods=['POST'])
@@ -515,27 +683,41 @@ def admin_add():
     """添加管理员"""
     if 'admin' not in session:
         return redirect('/login')
+    
+    # 只有super角色才能添加管理员
+    if session.get('admin_role') != 'super':
+        session_db = SessionLocal()
+        try:
+            admins = session_db.query(AdminUser).all()
+            return render_template('admin_list.html', admins=admins, error='权限不足，只有超级管理员才能添加管理员')
+        finally:
+            session_db.close()
 
     username = request.form.get('username')
     password = request.form.get('password')
     role = request.form.get('role', 'admin')
 
-    if AdminUser.query.filter_by(username=username).first():
-        return render_template('admin_list.html', admins=AdminUser.query.all(), error='用户名已存在')
+    session_db = SessionLocal()
+    try:
+        if session_db.query(AdminUser).filter_by(username=username).first():
+            admins = session_db.query(AdminUser).all()
+            return render_template('admin_list.html', admins=admins, error='用户名已存在')
 
-    # 使用pbkdf2_hmac加密（与init_db.py一致）
-    salt = secrets.token_hex(16)
-    pwd_hash = hashlib.pbkdf2_hmac(
-        'sha256',
-        password.encode(),
-        salt.encode(),
-        100000
-    ).hex()
-    admin = AdminUser(username=username, password_hash=pwd_hash, salt=salt, role=role)
-    db.session.add(admin)
-    db.session.commit()
+        # 使用pbkdf2_hmac加密（与init_db.py一致）
+        salt = secrets.token_hex(16)
+        pwd_hash = hashlib.pbkdf2_hmac(
+            'sha256',
+            password.encode(),
+            salt.encode(),
+            100000
+        ).hex()
+        admin = AdminUser(username=username, password_hash=pwd_hash, salt=salt, role=role, created_at=str(datetime.now()))
+        session_db.add(admin)
+        session_db.commit()
 
-    return redirect(url_for('admin_list'))
+        return redirect(url_for('admin_list'))
+    finally:
+        session_db.close()
 
 
 @app.route('/admin_delete', methods=['POST'])
@@ -543,14 +725,31 @@ def admin_delete():
     """删除管理员"""
     if 'admin' not in session:
         return redirect('/login')
-
+    
     username = request.form.get('username')
-    admin = AdminUser.query.filter_by(username=username).first()
-    if admin:
-        db.session.delete(admin)
-        db.session.commit()
+    current_role = session.get('admin_role')
+    
+    # admin角色不能删除super用户
+    if current_role != 'super':
+        session_db = SessionLocal()
+        try:
+            target_user = session_db.query(AdminUser).filter_by(username=username).first()
+            if target_user and target_user.role == 'super':
+                admins = session_db.query(AdminUser).all()
+                return render_template('admin_list.html', admins=admins, error='权限不足，不能删除超级管理员')
+        finally:
+            session_db.close()
 
-    return redirect(url_for('admin_list'))
+    session_db = SessionLocal()
+    try:
+        admin = session_db.query(AdminUser).filter_by(username=username).first()
+        if admin:
+            session_db.delete(admin)
+            session_db.commit()
+
+        return redirect(url_for('admin_list'))
+    finally:
+        session_db.close()
 
 
 @app.route('/change_password', methods=['GET', 'POST'])
@@ -562,43 +761,52 @@ def admin_change_password():
     # 获取要修改密码的用户名（从URL参数获取）
     target_username = request.args.get('username')
     current_username = session.get('admin')
+    current_role = session.get('admin_role')
 
     # 如果没有指定用户名，默认修改当前用户的密码
     if not target_username:
         target_username = current_username
 
+    # 只有super角色可以修改其他用户的密码，admin角色只能修改自己的密码
+    if current_role != 'super' and target_username != current_username:
+        return render_template('admin/change_password.html', error='权限不足，只能修改自己的密码', username=current_username)
+
     # 获取目标用户
-    target_user = AdminUser.query.filter_by(username=target_username).first()
-    if not target_user:
-        return render_template('admin/change_password.html', error='用户不存在')
+    session_db = SessionLocal()
+    try:
+        target_user = session_db.query(AdminUser).filter_by(username=target_username).first()
+        if not target_user:
+            return render_template('admin/change_password.html', error='用户不存在')
 
-    if request.method == 'POST':
-        new_password = request.form.get('new_password')
-        confirm_password = request.form.get('confirm_password')
+        if request.method == 'POST':
+            new_password = request.form.get('new_password')
+            confirm_password = request.form.get('confirm_password')
 
-        # 验证新密码
-        if new_password != confirm_password:
-            return render_template('admin/change_password.html', error='两次输入的密码不一致', username=target_username)
+            # 验证新密码
+            if new_password != confirm_password:
+                return render_template('admin/change_password.html', error='两次输入的密码不一致', username=target_username)
 
-        if len(new_password) < 6:
-            return render_template('admin/change_password.html', error='密码长度不能少于6位', username=target_username)
+            if len(new_password) < 6:
+                return render_template('admin/change_password.html', error='密码长度不能少于6位', username=target_username)
 
-        # 更新密码
-        new_salt = secrets.token_hex(16)
-        new_pwd_hash = hashlib.pbkdf2_hmac(
-            'sha256',
-            new_password.encode(),
-            new_salt.encode(),
-            100000
-        ).hex()
+            # 更新密码
+            new_salt = secrets.token_hex(16)
+            new_pwd_hash = hashlib.pbkdf2_hmac(
+                'sha256',
+                new_password.encode(),
+                new_salt.encode(),
+                100000
+            ).hex()
 
-        target_user.password_hash = new_pwd_hash
-        target_user.salt = new_salt
-        db.session.commit()
+            target_user.password_hash = new_pwd_hash
+            target_user.salt = new_salt
+            session_db.commit()
 
-        return render_template('admin/change_password.html', success='密码修改成功', username=target_username)
+            return render_template('admin/change_password.html', success='密码修改成功', username=target_username)
 
-    return render_template('admin/change_password.html', username=target_username)
+        return render_template('admin/change_password.html', username=target_username)
+    finally:
+        session_db.close()
 
 
 # =============================
