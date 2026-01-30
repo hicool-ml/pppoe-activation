@@ -12,7 +12,8 @@ import logging
 from config import BASE_DIR, PPP_LOG_DIR, APP_PORT
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from models import ActivationLog, Base
+from models import ActivationLog, Base, NetworkConfig
+from network.interface import prepare_interface
 
 app = Flask(__name__, static_folder='static', template_folder='templates')
 app.secret_key = os.environ.get('SECRET_KEY', os.urandom(32))
@@ -313,30 +314,41 @@ def activate():
         pass
     
     # 使用"锁即资源"的方式查找可用网卡（避免竞态窗口）
-    # 直接尝试获取锁，如果获取成功则该网卡可用
+    # 从数据库读取网络配置
+    net_config = NetworkConfig.query.first()
+    
+    # 如果数据库中没有配置，使用 config.py 的默认值
+    if not net_config:
+        net_mode = 'physical'
+        base_interface = NETWORK_INTERFACES[0] if NETWORK_INTERFACES else 'eth0'
+        vlan_id = None
+        logger.info(f"数据库中没有网络配置，使用默认值: {net_mode}, {base_interface}")
+    else:
+        net_mode = net_config.net_mode
+        base_interface = net_config.base_interface
+        vlan_id = net_config.vlan_id
+        logger.info(f"从数据库读取网络配置: {net_mode}, {base_interface}, vlan={vlan_id}")
+    
     selected_iface = None
     lock_fd = None
     
-    for iface in NETWORK_INTERFACES:
-        # 检查网卡是否有物理连接
-        carrier = check_interface_carrier(iface)
-        logger.info(f"网卡 {iface} carrier状态: {carrier}")
-        if not carrier:
-            logger.warning(f"网卡 {iface} 没有物理连接，跳过")
-            continue
-        
-        # 尝试获取网卡锁（非阻塞模式）
-        try:
-            lock_path = os.path.join(LOCK_DIR, f'{iface}.lock')
-            fd = open(lock_path, 'w')
-            fcntl.flock(fd.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-            lock_fd = fd
-            selected_iface = iface
-            logger.info(f"成功获取网卡 {iface} 的锁")
-            break
-        except (BlockingIOError, IOError):
-            logger.info(f"网卡 {iface} 已被锁定，跳过")
-            continue
+    try:
+        # 使用接口准备层准备接口（物理或VLAN）
+        iface = prepare_interface(net_mode, base_interface, vlan_id)
+        selected_iface = iface
+    except ValueError as e:
+        log_data["success"] = False
+        log_data["error_code"] = "997"
+        log_data["error_message"] = f"网络配置错误: {str(e)}"
+        log_activation(log_data)
+        logger.error(f"网络配置错误: {e}")
+        return jsonify({
+            "success": False,
+            "error_code": "997",
+            "error_message": f"网络配置错误: {str(e)}",
+            "username": username,
+            "iface": "none"
+        })
     
     if not selected_iface:
         log_data["success"] = False

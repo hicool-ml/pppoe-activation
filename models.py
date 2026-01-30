@@ -16,7 +16,7 @@ Base = declarative_base()
 
 class ActivationLog(Base):
     __tablename__ = 'activation_logs'
-
+    
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(50))
     role = Column(String(20))
@@ -28,6 +28,18 @@ class ActivationLog(Base):
     error_code = Column(String(10))
     error_message = Column(String(200))
     timestamp = Column(String(30))
+
+
+class NetworkConfig(Base):
+    """网络配置表（运行时配置）"""
+    __tablename__ = 'network_config'
+    
+    id = Column(Integer, primary_key=True, index=True)
+    net_mode = Column(String(20), default='physical')  # physical | vlan
+    base_interface = Column(String(20))  # enp3s0
+    vlan_id = Column(Integer, nullable=True)  # 100（可为空）
+    created_at = Column(String(30))  # 创建时间
+    updated_at = Column(String(30))  # 更新时间
 
 def init_db():
     """创建表（如果不存在）"""
