@@ -188,6 +188,25 @@ def ensure_vlan_interface(base, vlan_id):
 
 def save_config(data):
     """保存配置"""
+    # 后端校验：VLAN ID 必须在 1-4094 之间
+    net_mode = data.get('net_mode', 'physical')
+    if net_mode == "vlan":
+        vlan_id_str = data.get('vlan_id', '').strip()
+        if not vlan_id_str:
+            raise ValueError("VLAN 模式需要指定 VLAN ID")
+        
+        try:
+            vlan_id = int(vlan_id_str)
+        except ValueError:
+            raise ValueError("VLAN ID 必须是数字")
+        
+        if vlan_id < 1 or vlan_id > 4094:
+            raise ValueError("VLAN ID 必须在 1-4094 之间")
+        
+        data['vlan_id'] = vlan_id  # 转换为整数
+    else:
+        data['vlan_id'] = None  # 物理模式不需要 VLAN ID
+    
     # 保存 config.py
     config_content = f"""# PPPOE 激活系统配置文件
 # 自动生成于 {subprocess.run(['date'], capture_output=True, text=True).stdout.strip()}

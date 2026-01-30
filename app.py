@@ -54,19 +54,11 @@ def get_pppoe_interface(session):
     """
     net_config = session.query(NetworkConfig).first()
     if not net_config:
-        raise RuntimeError("网络配置不存在，请先初始化系统")
+        raise RuntimeError("未找到网络配置，请先完成初始化")
     
-    if net_config.net_mode == "physical":
-        logger.info(f"使用物理网卡: {net_config.base_interface}")
-        return net_config.base_interface
-    elif net_config.net_mode == "vlan":
-        if not net_config.vlan_id:
-            raise RuntimeError("VLAN 模式需要指定 VLAN ID")
-        vlan_iface = f"{net_config.base_interface}.{net_config.vlan_id}"
-        logger.info(f"使用 VLAN 子接口: {vlan_iface}")
-        return vlan_iface
-    else:
-        raise RuntimeError(f"不支持的网络模式: {net_config.net_mode}")
+    iface = net_config.effective_interface()
+    logger.info(f"PPPoE 使用接口: {iface} (模式: {net_config.net_mode})")
+    return iface
 
 
 def log_activation(data):
