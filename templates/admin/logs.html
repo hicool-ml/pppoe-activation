@@ -286,7 +286,8 @@
                                 <td>{{ log.role or 'N/A' }}</td>
                                 <td>
                                     {% set isp_name = ISP_DISPLAY.get(log.isp, '未知') %}
-                                    <span class="badge badge-{{ isp_name }}">{{ isp_name }}</span>
+                                    {% set isp_color = ISP_COLORS.get(isp_name, '#6c757d') %}
+                                    <span class="badge" style="background-color: {{ isp_color }};">{{ isp_name }}</span>
                                 </td>
                                 <td><code>{{ log.username }}</code></td>
                                 <td>

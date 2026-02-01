@@ -248,6 +248,7 @@
           <option value="cmccgx">移动（手机号）</option>
           <option value="96301">电信（手机号）</option>
           <option value="10010">联通（手机号）</option>
+          <option value="direct">直拨（自由输入）</option>
         </select>
       </div>
       
@@ -335,6 +336,10 @@
         cmccOptions.classList.add('hidden');
         usernameLabel.textContent = "学工号";
         usernameInput.placeholder = "请输入学工号";
+      } else if (ispSelect.value === "direct") {
+        cmccOptions.classList.add('hidden');
+        usernameLabel.textContent = "PPPoE账号";
+        usernameInput.placeholder = "请输入完整的PPPoE账号（包含@域名）";
       } else {
         cmccOptions.classList.add('hidden');
         usernameLabel.textContent = "手机号";
@@ -359,6 +364,12 @@
       const isp = ispSelect.value;
       
       if (!baseUser || !isp) {
+        accountPreview.classList.add('hidden');
+        return;
+      }
+      
+      // 直拨模式：不添加后缀，不显示预览
+      if (isp === "direct") {
         accountPreview.classList.add('hidden');
         return;
       }
@@ -398,6 +409,8 @@
         passwordHint.textContent = "默认密码为手机号后8位，如已修改请填写正确密码";
       } else if (isp === "10010") {
         passwordHint.textContent = "默认密码为身份证后6位，如已修改请填写正确密码";
+      } else if (isp === "direct") {
+        passwordHint.textContent = "请输入PPPoE账号密码";
       }
     }
     
@@ -439,8 +452,11 @@
         if (cmccType === "scxy") data.username = "scxy" + data.username;
       }
       
-      const finalUsername = data.username + "@" + data.isp;
-      data.username = finalUsername;
+      // 直拨模式：不添加后缀
+      if (data.isp !== "direct") {
+        const finalUsername = data.username + "@" + data.isp;
+        data.username = finalUsername;
+      }
       
       try {
         const res = await fetch('/activate', {

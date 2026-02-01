@@ -487,7 +487,8 @@ def activate():
     # 移动：输入纯数字手机号 → 系统添加 @cmccgx 后缀；修改过密码输入 scxy + 手机号 → 系统添加 @cmccgx 后缀
     # 电信：输入纯数字手机号 → 系统添加 @96301 后缀
     # 联通：输入纯数字手机号 → 系统添加 @10010 后缀
-    if '@' not in username:
+    # 直拨：不添加任何后缀，用户自由输入完整账号
+    if isp != 'direct' and '@' not in username:
         # 检查是否为纯数字
         if username.isdigit():
             # 根据ISP类型添加后缀
@@ -512,6 +513,11 @@ def activate():
             username = f"{username}@cmccgx"
             logger.info(f"修改过密码的移动用户，添加@cmccgx后缀: {username}")
         
+        # 更新日志记录为完整账号（在调用log_activation之前）
+        log_data["username"] = username
+    elif isp == 'direct':
+        # 直拨模式：不添加任何后缀，直接使用用户输入的账号
+        logger.info(f"直拨模式，使用原始账号: {username}")
         # 更新日志记录为完整账号（在调用log_activation之前）
         log_data["username"] = username
 

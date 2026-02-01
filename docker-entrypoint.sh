@@ -79,6 +79,70 @@ configure_ppp_device() {
     fi
 }
 
+# 启用所有可用的物理网卡
+enable_all_network_interfaces() {
+    log_info "启用所有可用的物理网卡..."
+    
+    # 获取所有物理网卡（排除lo、docker、veth等虚拟网卡）
+    ip -j link show | python3 -c "
+import sys, json
+
+interfaces_data = json.load(sys.stdin)
+enabled_count = 0
+skipped_count = 0
+
+for iface_data in interfaces_data:
+    ifname = iface_data.get('ifname', '')
+    operstate = iface_data.get('operstate', 'UNKNOWN')
+    link_type = iface_data.get('link_type', '')
+    
+    # 跳过虚拟网卡和特殊接口
+    if ifname in ['lo', 'docker0', 'flannel', 'cni', 'tun', 'tap', 'veth']:
+        skipped_count += 1
+        continue
+    
+    # 跳过已包含点的接口（VLAN子接口、桥接等）
+    if '.' in ifname:
+        skipped_count += 1
+        continue
+    
+    # 跳过非以太网接口
+    if link_type not in ['ether', 'unknown']:
+        skipped_count += 1
+        continue
+    
+    # 如果网卡处于DOWN状态，尝试启用
+    if operstate == 'DOWN' or operstate == 'UNKNOWN':
+        import subprocess
+        try:
+            result = subprocess.run(['ip', 'link', 'set', ifname, 'up'], 
+                                  capture_output=True, text=True, timeout=5)
+            if result.returncode == 0:
+                print(f'[SUCCESS] 启用网卡: {ifname}')
+                enabled_count += 1
+            else:
+                print(f'[FAILED] 启用网卡 {ifname} 失败: {result.stderr.strip()}')
+        except Exception as e:
+            print(f'[ERROR] 启用网卡 {ifname} 异常: {str(e)}')
+    else:
+        print(f'[INFO] 网卡 {ifname} 已启动 ({operstate})')
+
+print(f'[SUMMARY] 成功启用 {enabled_count} 个网卡，跳过 {skipped_count} 个接口')
+" 2>&1 | while IFS= read -r line; do
+        if [[ "$line" == *"[SUCCESS]"* ]]; then
+            log_success "${line#'[SUCCESS] '}"
+        elif [[ "$line" == *"[FAILED]"* ]]; then
+            log_error "${line#'[FAILED] '}"
+        elif [[ "$line" == *"[ERROR]"* ]]; then
+            log_error "${line#'[ERROR] '}"
+        elif [[ "$line" == *"[INFO]"* ]]; then
+            log_info "${line#'[INFO] '}"
+        elif [[ "$line" == *"[SUMMARY]"* ]]; then
+            log_info "${line#'[SUMMARY] '}"
+        fi
+    done
+}
+
 # 配置VLAN接口（从数据库读取配置）
 configure_vlan_interfaces() {
     log_info "配置VLAN接口..."
@@ -212,6 +276,7 @@ main() {
     check_env_vars
     init_database
     configure_ppp_device
+    enable_all_network_interfaces
     configure_vlan_interfaces
     show_startup_info
     
