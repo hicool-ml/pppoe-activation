@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>系统配置查看 - PPPoE管理</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background-color: #f8f9fa;
+            display: flex;
+            justify-content: center;
+            padding: 40px 20px;
+        }
+        .form-wrapper {
+            width: 100%;
+            max-width: 1400px;
+        }
+        .tabs {
+            display: flex;
+            position: relative;
+            z-index: 2;
+            margin-bottom: 0;
+        }
+        .tab {
+            padding: 14px 28px;
+            background: #f1f3f5;
+            cursor: pointer;
+            border-radius: 12px 12px 0 0;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            font-weight: 500;
+            color: #495057;
+            border: none;
+            position: relative;
+            margin-right: 0;
+            box-shadow: inset 0 -2px 4px rgba(0,0,0,0.05);
+            text-decoration: none;
+        }
+        .tab.active {
+            background: white;
+            color: #212529;
+            box-shadow: none;
+            transform: translateY(0);
+            z-index: 3;
+        }
+        .form-container {
+            background: white;
+            border-radius: 0 12px 12px 12px;
+            padding: 30px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+            position: relative;
+            z-index: 1;
+            margin-top: 0;
+            border-top: none;
+        }
+        .config-card {
+            background: #f8f9fa;
+            border-radius: 12px;
+            padding: 25px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        }
+        .section-title {
+            color: #212529;
+            font-size: 20px;
+            font-weight: 600;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #667eea;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: #495057;
+            font-size: 14px;
+        }
+        .hint {
+            font-size: 12px;
+            color: #6c757d;
+            margin-top: 5px;
+        }
+        .readonly-field {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            font-size: 14px;
+            background: #e9ecef;
+            color: #495057;
+        }
+        .interfaces-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 15px;
+            margin-top: 10px;
+        }
+        .interface-item {
+            display: flex;
+            align-items: center;
+            padding: 15px;
+            border: 2px solid #dee2e6;
+            border-radius: 10px;
+            background: #e9ecef;
+        }
+        .interface-item.selected {
+            border-color: #667eea;
+            background-color: #667eea;
+            color: white;
+        }
+        .interface-item input[type="checkbox"] {
+            margin-right: 12px;
+            width: 18px;
+            height: 18px;
+        }
+        .interface-info {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            flex: 1;
+        }
+        .interface-name {
+            font-weight: 600;
+            font-size: 15px;
+        }
+        .interface-status {
+            font-size: 12px;
+            margin-top: 4px;
+        }
+        .interface-item.selected .interface-status {
+            color: rgba(255, 255, 255, 0.9);
+        }
+        .info {
+            background-color: #d1ecf1;
+            border: 1px solid #bee5eb;
+            color: #0c5460;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            font-size: 14px;
+        }
+        .row {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+        .col {
+            flex: 1;
+            min-width: 250px;
+        }
+        .mode-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-left: 10px;
+        }
+        .mode-physical {
+            background-color: #28a745;
+            color: white;
+        }
+        .mode-vlan {
+            background-color: #007bff;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="form-wrapper">
+        <div class="tabs">
+            <a href="http://{{ request.host.split(':')[0] }}:8081/dashboard" class="tab">📊 仪表盘</a>
+            <a href="http://{{ request.host.split(':')[0] }}:8081/logs" class="tab">📝 激活日志</a>
+            {% if current_role == 'super' %}
+            <a href="http://{{ request.host.split(':')[0] }}:9999" class="tab active">⚙️ 系统配置</a>
+            {% else %}
+            <a href="/config" class="tab active">⚙️ 系统配置</a>
+            {% endif %}
+            <a href="http://{{ request.host.split(':')[0] }}:8081/admin_list" class="tab">👥 管理员管理</a>
+            <a href="http://{{ request.host.split(':')[0] }}:8081/logout" class="tab">🚪 登出</a>
+        </div>
+        
+        <div class="form-container">
+            <div class="info">
+                <strong>ℹ️ 只读模式</strong>：当前页面仅用于查看系统配置，无法进行修改操作。如需修改配置，请联系超级管理员或访问 <a href="http://{{ request.host.split(':')[0] }}:9999/config" style="color: #007bff;">http://{{ request.host.split(':')[0] }}:9999/config</a>
+            </div>
+            
+            <!-- 网卡配置 -->
+            <div class="config-card">
+                <div class="section-title">
+                    📡 网卡配置
+                    {% if current_config.net_mode == 'vlan' %}
+                    <span class="mode-badge mode-vlan">VLAN子接口模式</span>
+                    {% else %}
+                    <span class="mode-badge mode-physical">物理网卡模式</span>
+                    {% endif %}
+                </div>
+                <div class="form-group">
+                    <label>网络模式：</label>
+                    <div class="readonly-field">
+                        {% if current_config.net_mode == 'vlan' %}
+                        VLAN子接口模式（在物理网卡上创建VLAN子接口）
+                        {% else %}
+                        物理网卡模式（直接使用物理网卡）
+                        {% endif %}
+                    </div>
+                    
+                    {% if current_config.net_mode == 'vlan' %}
+                    <div class="form-group" style="margin-top: 15px;">
+                        <label>物理网卡：</label>
+                        <div class="readonly-field">{{ current_config.base_interface or '未配置' }}</div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>VLAN ID：</label>
+                        <div class="readonly-field">{{ current_config.vlan_id or '未配置' }}</div>
+                        <div class="hint">系统将自动创建以下VLAN子接口用于PPPoE拨号</div>
+                    </div>
+                    {% endif %}
+                    
+                    <label>已配置的网卡：</label>
+                    <div class="hint">以下网卡已配置用于PPPoE拨号</div>
+                    <div class="interfaces-grid">
+                        {% for iface_name in current_config.interfaces %}
+                        <div class="interface-item selected">
+                            <input type="checkbox" checked disabled>
+                            <div class="interface-info">
+                                <span class="interface-name">{{ iface_name }}</span>
+                                <span class="interface-status">已配置</span>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 端口配置 -->
+            <div class="config-card">
+                <div class="section-title">🔌 端口配置</div>
+                <div class="row">
+                    <div class="col">
+                        <div class="form-group">
+                            <label>应用端口：</label>
+                            <div class="readonly-field">{{ current_config.app_port }}</div>
+                            <div class="hint">用户激活服务端口</div>
+                        </div>
+                    </div>
+                    <div class="col">
+                        <div class="form-group">
+                            <label>管理端口：</label>
+                            <div class="readonly-field">{{ current_config.admin_port }}</div>
+                            <div class="hint">管理后台端口</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 持久化存储配置 -->
+            <div class="config-card">
+                <div class="section-title">💾 持久化存储配置</div>
+                <div class="hint" style="margin-bottom: 20px;">
+                    配置数据持久化路径，确保容器重启后数据不丢失。
+                </div>
+                
+                <div class="form-group">
+                    <label>数据库文件路径：</label>
+                    <div class="readonly-field">{{ current_config.db_path }}</div>
+                    <div class="hint">存储激活记录和管理员信息</div>
+                </div>
+                
+                <div class="form-group">
+                    <label>实例目录路径：</label>
+                    <div class="readonly-field">{{ current_config.instance_path }}</div>
+                    <div class="hint">存储数据库实例文件</div>
+                </div>
+                
+                <div class="form-group">
+                    <label>日志目录路径：</label>
+                    <div class="readonly-field">{{ current_config.logs_path }}</div>
+                    <div class="hint">存储PPPoE拨号日志</div>
+                </div>
+                
+                <div class="form-group">
+                    <label>数据目录路径：</label>
+                    <div class="readonly-field">{{ current_config.data_path }}</div>
+                    <div class="hint">存储其他数据文件</div>
+                </div>
+            </div>
+            
+            <!-- 时区配置 -->
+            <div class="config-card">
+                <div class="section-title">🌍 时区配置</div>
+                <div class="form-group">
+                    <label>时区：</label>
+                    <div class="readonly-field">{{ current_config.tz }}</div>
+                    <div class="hint">系统时区设置</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
