@@ -43,12 +43,24 @@
       font-weight: bold;
       text-align: center;
       margin-bottom: 30px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
     }
     @media (max-width: 576px) {
       .activation-card h1 {
         font-size: 24px;
         margin-bottom: 25px;
       }
+    }
+    .lang-select {
+      font-size: 14px;
+      padding: 4px 8px;
+      border-radius: 6px;
+      border: 1px solid #e0e0e0;
+      background: white;
+      cursor: pointer;
     }
     .form-group {
       margin-bottom: 20px;
@@ -218,85 +230,105 @@
 </head>
 <body>
   <div class="activation-card">
-    <h1>PPPoE账号激活</h1>
+    <!-- 标题 + 语言选择器 -->
+    <h1>
+      <span data-i18n="title">PPPoE账号激活</span>
+      <select id="langSelect" class="lang-select">
+        <option value="zh">中文</option>
+        <option value="en">EN</option>
+        <option value="fr">Français</option>
+        <option value="es">Español</option>
+        <option value="ja">日本語</option>
+        <option value="ko">한국어</option>
+        <option value="th">ไทย</option>
+        <option value="vi">Tiếng Việt</option>
+        <option value="ur">اردو</option>
+        <option value="hi">हिन्दी</option>
+        <option value="ar">العربية</option>
+      </select>
+    </h1>
     
     <!-- 输入表单 -->
     <form id="pppoeForm">
       <!-- 姓名 -->
       <div class="form-group">
-        <label>姓名</label>
-        <input type="text" id="name" class="form-control" placeholder="请输入姓名" required>
+        <label data-i18n="name">姓名</label>
+        <input type="text" id="name" class="form-control" data-i18n-placeholder="name_placeholder" placeholder="请输入姓名" required>
       </div>
       
       <!-- 职业 -->
       <div class="form-group">
-        <label>职业</label>
+        <label data-i18n="role">职业</label>
         <select id="role" class="form-control" required>
-          <option value="">请选择</option>
-          <option value="学生">学生</option>
-          <option value="教职工">教职工</option>
-          <option value="外包">外包</option>
+          <option value="" data-i18n="select">请选择</option>
+          <option value="学生" data-i18n="student">学生</option>
+          <option value="教职工" data-i18n="staff">教职工</option>
+          <option value="外包" data-i18n="outsourcing">外包</option>
         </select>
       </div>
       
       <!-- ISP选择 -->
       <div class="form-group">
-        <label>运营商</label>
+        <label data-i18n="isp">运营商</label>
         <select id="isp" class="form-control" required>
-          <option value="">请选择</option>
-          <option value="cdu">校园网（学工号）</option>
-          <option value="cmccgx">移动（手机号）</option>
-          <option value="96301">电信（手机号）</option>
-          <option value="10010">联通（手机号）</option>
-          <option value="direct">直拨（自由输入）</option>
+          <option value="" data-i18n="select">请选择</option>
+          <option value="cdu" data-i18n="isp_cdu">校园网（学工号）</option>
+          <option value="cmccgx" data-i18n="isp_cmcc">移动（手机号）</option>
+          <option value="96301" data-i18n="isp_ct">电信（手机号）</option>
+          <option value="10010" data-i18n="isp_cu">联通（手机号）</option>
+          <option value="direct" data-i18n="direct">直拨（自由输入）</option>
         </select>
       </div>
       
       <!-- 移动专属选项 -->
       <div id="cmccOptions" class="form-group hidden">
-        <label>移动账号类型</label>
+        <label data-i18n="cmcc_type">移动账号类型</label>
         <div class="radio-group">
           <label>
-            <input type="radio" name="cmccType" value="normal" checked> 原始密码
+            <input type="radio" name="cmccType" value="normal" checked> <span data-i18n="cmcc_normal">原始密码</span>
           </label>
           <label>
-            <input type="radio" name="cmccType" value="scxy"> 修改过密码
+            <input type="radio" name="cmccType" value="scxy"> <span data-i18n="cmcc_changed">修改过密码</span>
           </label>
         </div>
       </div>
       
       <!-- 账号 -->
       <div class="form-group">
-        <label id="usernameLabel">账号</label>
-        <input type="text" id="username" class="form-control" placeholder="请输入账号" required>
+        <label id="usernameLabel" data-i18n="account">账号</label>
+        <input type="text" id="username" class="form-control" required>
         <p id="accountPreview" class="info-text text-center font-semibold hidden" style="color: #667eea;"></p>
       </div>
       
-      <!-- 密码 + 显示按钮 -->
+      <!-- 密码 + 显示按钮 + 修改密码按钮 -->
       <div class="form-group">
-        <label>密码</label>
-        <div style="position: relative;">
-          <input type="password" id="password" class="form-control" placeholder="请输入密码" style="padding-right: 50px;">
-          <button type="button" id="togglePassword" class="password-toggle">
-            👁️
-          </button>
+        <label data-i18n="password">密码</label>
+        <div style="display: flex; gap: 10px; align-items: center;">
+          <div style="position: relative; flex: 1;">
+            <input type="password" id="password" class="form-control" style="padding-right: 50px;">
+            <button type="button" id="togglePassword" class="password-toggle">
+              👁️
+            </button>
+          </div>
+          <button type="button" id="changePasswordBtn" class="btn-primary" style="flex: 1; white-space: nowrap;" data-i18n="change_pwd">修改密码</button>
         </div>
         <p id="passwordHint" class="info-text" style="font-size: 12px;"></p>
       </div>
       
-      <button type="submit" class="btn-primary">激活账号</button>
+      <button type="submit" class="btn-primary" data-i18n="activate">激活账号</button>
     </form>
     
     <!-- 结果显示 -->
     <div id="resultBox" class="result-box hidden">
-      <h2>激活结果</h2>
+      <h2 data-i18n="result">激活结果</h2>
       <div id="resultContent"></div>
-      <button id="toggleLog" class="toggle-log">查看详细日志</button>
+      <button id="toggleLog" class="toggle-log" data-i18n="log">查看详细日志</button>
       <pre id="logBox" class="log-box hidden"></pre>
     </div>
   </div>
   
   <script>
+    /* ================= 原有业务逻辑（变量定义） ================= */
     const ispSelect = document.getElementById('isp');
     const cmccOptions = document.getElementById('cmccOptions');
     const usernameInput = document.getElementById('username');
@@ -305,6 +337,7 @@
     const passwordInput = document.getElementById('password');
     const passwordHint = document.getElementById('passwordHint');
     const togglePassword = document.getElementById('togglePassword');
+    const changePasswordBtn = document.getElementById('changePasswordBtn');
     const form = document.getElementById('pppoeForm');
     const resultBox = document.getElementById('resultBox');
     const resultContent = document.getElementById('resultContent');
@@ -326,27 +359,838 @@
       "815": "服务器未响应，请联系运营商"
     };
     
+    /* ================= i18n 国际化 ================= */
+    const i18n = {
+      zh: {
+        title: "PPPoE账号激活",
+        name: "姓名",
+        name_placeholder: "请输入姓名",
+        role: "职业",
+        isp: "运营商",
+        account: "账号",
+        password: "密码",
+        activate: "激活账号",
+        change_pwd: "修改密码",
+        result: "激活结果",
+        log: "查看详细日志",
+        select: "请选择",
+        student: "学生",
+        staff: "教职工",
+        outsourcing: "外包",
+        direct: "直拨（自由输入）",
+        cmcc_type: "移动账号类型",
+        cmcc_normal: "原始密码",
+        cmcc_changed: "修改过密码",
+        isp_cdu: "校园网（学工号）",
+        isp_cmcc: "移动（手机号）",
+        isp_ct: "电信（手机号）",
+        isp_cu: "联通（手机号）",
+        activating: "激活中...",
+        activating_wait: "正在激活，请稍候...",
+        success: "✅ 激活成功",
+        failed: "❌ 激活失败",
+        error_code: "错误码",
+        tip: "提示",
+        account_used: "账号",
+        iface_used: "使用接口",
+        mac: "MAC",
+        ip: "IP",
+        no_ip: "无",
+        select_isp: "请选择运营商",
+        request_failed: "请求失败，请检查网络连接",
+        loading_log: "正在加载日志...",
+        load_log_failed: "加载日志失败",
+        no_log: "暂无日志记录",
+        log_file: "日志文件",
+        account_cdu: "学工号",
+        account_cdu_placeholder: "请输入学工号",
+        account_cmcc: "手机号",
+        account_cmcc_placeholder: "请输入手机号",
+        account_ct: "手机号",
+        account_ct_placeholder: "请输入手机号",
+        account_cu: "手机号",
+        account_cu_placeholder: "请输入手机号",
+        account_direct: "PPPoE账号",
+        account_direct_placeholder: "请输入完整的PPPoE账号（包含@域名）",
+        pwd_unified: "请输入统一身份认证密码",
+        pwd_cmcc_normal: "默认密码为手机号后6位，如已修改请填写正确密码",
+        pwd_cmcc_changed: "请输入新密码",
+        pwd_ct: "默认密码为手机号后8位，如已修改请填写正确密码",
+        pwd_cu: "默认密码为身份证后6位，如已修改请填写正确密码",
+        pwd_direct: "请输入PPPoE账号密码",
+        full_account: "完整账号：",
+        alert_cdu: "跳转到统一身份认证页面修改密码",
+        alert_cmcc: "编辑短信' XGKDMM****** ' {单引号内为短信内容，\"*\"为数字）发送至10086",
+        alert_ct: "编辑短信\"重置宽带密码\"发送到10001（电信客服号码）。根据短信回复的提示，输入身份证号码等信息来重置密码。",
+        alert_cu: "打开联通网上营业厅APP修改宽带密码"
+      },
+      en: {
+        title: "PPPoE Account Activation",
+        name: "Name",
+        name_placeholder: "Enter your name",
+        role: "Role",
+        isp: "ISP",
+        account: "Account",
+        password: "Password",
+        activate: "Activate",
+        change_pwd: "Change Password",
+        result: "Result",
+        log: "View Logs",
+        select: "Select",
+        student: "Student",
+        staff: "Staff",
+        outsourcing: "Outsourcing",
+        direct: "Direct Input",
+        cmcc_type: "CMCC Account Type",
+        cmcc_normal: "Default Password",
+        cmcc_changed: "Changed Password",
+        isp_cdu: "Campus Network (Student ID)",
+        isp_cmcc: "China Mobile (Phone)",
+        isp_ct: "China Telecom (Phone)",
+        isp_cu: "China Unicom (Phone)",
+        activating: "Activating...",
+        activating_wait: "Activating, please wait...",
+        success: "✅ Activation Successful",
+        failed: "❌ Activation Failed",
+        error_code: "Error Code",
+        tip: "Tip",
+        account_used: "Account",
+        iface_used: "Interface",
+        mac: "MAC",
+        ip: "IP",
+        no_ip: "None",
+        select_isp: "Please select ISP",
+        request_failed: "Request failed, please check network connection",
+        loading_log: "Loading logs...",
+        load_log_failed: "Failed to load logs",
+        no_log: "No log records",
+        log_file: "Log File",
+        account_cdu: "Student ID",
+        account_cdu_placeholder: "Enter your student ID",
+        account_cmcc: "Phone Number",
+        account_cmcc_placeholder: "Enter your phone number",
+        account_ct: "Phone Number",
+        account_ct_placeholder: "Enter your phone number",
+        account_cu: "Phone Number",
+        account_cu_placeholder: "Enter your phone number",
+        account_direct: "PPPoE Account",
+        account_direct_placeholder: "Enter full PPPoE account (including @domain)",
+        pwd_unified: "Enter unified authentication password",
+        pwd_cmcc_normal: "Default password is last 6 digits of phone number",
+        pwd_cmcc_changed: "Enter new password",
+        pwd_ct: "Default password is last 8 digits of phone number",
+        pwd_cu: "Default password is last 6 digits of ID card",
+        pwd_direct: "Enter PPPoE account password",
+        full_account: "Full account: ",
+        alert_cdu: "Go to unified authentication page to change password",
+        alert_cmcc: "Send SMS 'XGKDMM******' to 10086",
+        alert_ct: "Send SMS '重置宽带密码' to 10001",
+        alert_cu: "Open China Unicom Online Business Hall APP to change broadband password"
+      },
+      fr: {
+        title: "Activation de compte PPPoE",
+        name: "Nom",
+        name_placeholder: "Entrez votre nom",
+        role: "Rôle",
+        isp: "FAI",
+        account: "Compte",
+        password: "Mot de passe",
+        activate: "Activer",
+        change_pwd: "Changer le mot de passe",
+        result: "Résultat",
+        log: "Voir les journaux",
+        select: "Sélectionner",
+        student: "Étudiant",
+        staff: "Personnel",
+        outsourcing: "Externalisation",
+        direct: "Entrée directe",
+        cmcc_type: "Type de compte CMCC",
+        cmcc_normal: "Mot de passe par défaut",
+        cmcc_changed: "Mot de passe changé",
+        isp_cdu: "Réseau campus (ID étudiant)",
+        isp_cmcc: "China Mobile (Téléphone)",
+        isp_ct: "China Telecom (Téléphone)",
+        isp_cu: "China Unicom (Téléphone)",
+        activating: "Activation...",
+        activating_wait: "Activation en cours, veuillez patienter...",
+        success: "✅ Activation réussie",
+        failed: "❌ Échec de l'activation",
+        error_code: "Code d'erreur",
+        tip: "Conseil",
+        account_used: "Compte",
+        iface_used: "Interface",
+        mac: "MAC",
+        ip: "IP",
+        no_ip: "Aucun",
+        select_isp: "Veuillez sélectionner le FAI",
+        request_failed: "Échec de la requête, veuillez vérifier votre connexion réseau",
+        loading_log: "Chargement des journaux...",
+        load_log_failed: "Échec du chargement des journaux",
+        no_log: "Aucun journal",
+        log_file: "Fichier journal",
+        account_cdu: "ID étudiant",
+        account_cdu_placeholder: "Entrez votre ID étudiant",
+        account_cmcc: "Numéro de téléphone",
+        account_cmcc_placeholder: "Entrez votre numéro de téléphone",
+        account_ct: "Numéro de téléphone",
+        account_ct_placeholder: "Entrez votre numéro de téléphone",
+        account_cu: "Numéro de téléphone",
+        account_cu_placeholder: "Entrez votre numéro de téléphone",
+        account_direct: "Compte PPPoE",
+        account_direct_placeholder: "Entrez le compte PPPoE complet (y compris @domaine)",
+        pwd_unified: "Entrez le mot de passe d'authentification unifié",
+        pwd_cmcc_normal: "Le mot de passe par défaut est les 6 derniers chiffres du numéro de téléphone",
+        pwd_cmcc_changed: "Entrez le nouveau mot de passe",
+        pwd_ct: "Le mot de passe par défaut est les 8 derniers chiffres du numéro de téléphone",
+        pwd_cu: "Le mot de passe par défaut est les 6 derniers chiffres de la carte d'identité",
+        pwd_direct: "Entrez le mot de passe du compte PPPoE",
+        full_account: "Compte complet : ",
+        alert_cdu: "Accéder à la page d'authentification unifiée pour changer le mot de passe",
+        alert_cmcc: "Envoyez SMS 'XGKDMM******' au 10086",
+        alert_ct: "Envoyez SMS '重置宽带密码' au 10001",
+        alert_cu: "Ouvrez l'application China Unicom Online Business Hall pour changer le mot de passe broadband"
+      },
+      es: {
+        title: "Activación de cuenta PPPoE",
+        name: "Nombre",
+        name_placeholder: "Ingrese su nombre",
+        role: "Rol",
+        isp: "ISP",
+        account: "Cuenta",
+        password: "Contraseña",
+        activate: "Activar",
+        change_pwd: "Cambiar contraseña",
+        result: "Resultado",
+        log: "Ver registros",
+        select: "Seleccionar",
+        student: "Estudiante",
+        staff: "Personal",
+        outsourcing: "Subcontratación",
+        direct: "Entrada directa",
+        cmcc_type: "Tipo de cuenta CMCC",
+        cmcc_normal: "Contraseña predeterminada",
+        cmcc_changed: "Contraseña cambiada",
+        isp_cdu: "Red del campus (ID de estudiante)",
+        isp_cmcc: "China Mobile (Teléfono)",
+        isp_ct: "China Telecom (Teléfono)",
+        isp_cu: "China Unicom (Teléfono)",
+        activating: "Activando...",
+        activating_wait: "Activando, por favor espere...",
+        success: "✅ Activación exitosa",
+        failed: "❌ Falló la activación",
+        error_code: "Código de error",
+        tip: "Consejo",
+        account_used: "Cuenta",
+        iface_used: "Interfaz",
+        mac: "MAC",
+        ip: "IP",
+        no_ip: "Ninguno",
+        select_isp: "Seleccione el ISP",
+        request_failed: "Solicitud fallida, verifique su conexión de red",
+        loading_log: "Cargando registros...",
+        load_log_failed: "Error al cargar registros",
+        no_log: "Sin registros",
+        log_file: "Archivo de registro",
+        account_cdu: "ID de estudiante",
+        account_cdu_placeholder: "Ingrese su ID de estudiante",
+        account_cmcc: "Número de teléfono",
+        account_cmcc_placeholder: "Ingrese su número de teléfono",
+        account_ct: "Número de teléfono",
+        account_ct_placeholder: "Ingrese su número de teléfono",
+        account_cu: "Número de teléfono",
+        account_cu_placeholder: "Ingrese su número de teléfono",
+        account_direct: "Cuenta PPPoE",
+        account_direct_placeholder: "Ingrese la cuenta PPPoE completa (incluyendo @dominio)",
+        pwd_unified: "Ingrese la contraseña de autenticación unificada",
+        pwd_cmcc_normal: "La contraseña predeterminada son los últimos 6 dígitos del número de teléfono",
+        pwd_cmcc_changed: "Ingrese la nueva contraseña",
+        pwd_ct: "La contraseña predeterminada son los últimos 8 dígitos del número de teléfono",
+        pwd_cu: "La contraseña predeterminada son los últimos 6 dígitos de la tarjeta de identidad",
+        pwd_direct: "Ingrese la contraseña de la cuenta PPPoE",
+        full_account: "Cuenta completa: ",
+        alert_cdu: "Ir a la página de autenticación unificada para cambiar la contraseña",
+        alert_cmcc: "Enviar SMS 'XGKDMM******' al 10086",
+        alert_ct: "Enviar SMS '重置宽带密码' al 10001",
+        alert_cu: "Abrir la aplicación China Unicom Online Business Hall para cambiar la contraseña de broadband"
+      },
+      ja: {
+        title: "PPPoEアカウント認証",
+        name: "名前",
+        name_placeholder: "名前を入力してください",
+        role: "役割",
+        isp: "ISP",
+        account: "アカウント",
+        password: "パスワード",
+        activate: "認証",
+        change_pwd: "パスワード変更",
+        result: "結果",
+        log: "ログを表示",
+        select: "選択",
+        student: "学生",
+        staff: "教職員",
+        outsourcing: "アウトソーシング",
+        direct: "直接入力",
+        cmcc_type: "CMCCアカウントタイプ",
+        cmcc_normal: "デフォルトパスワード",
+        cmcc_changed: "変更されたパスワード",
+        isp_cdu: "キャンパスネットワーク（学生ID）",
+        isp_cmcc: "中国移動（電話番号）",
+        isp_ct: "中国電信（電話番号）",
+        isp_cu: "中国聯通（電話番号）",
+        activating: "認証中...",
+        activating_wait: "認証中、お待ちください...",
+        success: "✅ 認証成功",
+        failed: "❌ 認証失敗",
+        error_code: "エラーコード",
+        tip: "ヒント",
+        account_used: "アカウント",
+        iface_used: "インターフェース",
+        mac: "MAC",
+        ip: "IP",
+        no_ip: "なし",
+        select_isp: "ISPを選択してください",
+        request_failed: "リクエストが失敗しました。ネットワーク接続を確認してください",
+        loading_log: "ログを読み込み中...",
+        load_log_failed: "ログの読み込みに失敗しました",
+        no_log: "ログなし",
+        log_file: "ログファイル",
+        account_cdu: "学生ID",
+        account_cdu_placeholder: "学生IDを入力してください",
+        account_cmcc: "電話番号",
+        account_cmcc_placeholder: "電話番号を入力してください",
+        account_ct: "電話番号",
+        account_ct_placeholder: "電話番号を入力してください",
+        account_cu: "電話番号",
+        account_cu_placeholder: "電話番号を入力してください",
+        account_direct: "PPPoEアカウント",
+        account_direct_placeholder: "完全なPPPoEアカウントを入力してください（@ドメインを含む）",
+        pwd_unified: "統一認証パスワードを入力してください",
+        pwd_cmcc_normal: "デフォルトパスワードは電話番号の下6桁です",
+        pwd_cmcc_changed: "新しいパスワードを入力してください",
+        pwd_ct: "デフォルトパスワードは電話番号の下8桁です",
+        pwd_cu: "デフォルトパスワードはIDカードの下6桁です",
+        pwd_direct: "PPPoEアカウントパスワードを入力してください",
+        full_account: "完全なアカウント：",
+        alert_cdu: "統一認証ページに移動してパスワードを変更",
+        alert_cmcc: "SMS 'XGKDMM******' を10086に送信",
+        alert_ct: "SMS '重置宽带密码' を10001に送信",
+        alert_cu: "中国聯通オンラインビジネスホールAPPを開いてブロードバンドパスワードを変更"
+      },
+      ko: {
+        title: "PPPoE 계정 활성화",
+        name: "이름",
+        name_placeholder: "이름을 입력하세요",
+        role: "역할",
+        isp: "ISP",
+        account: "계정",
+        password: "비밀번호",
+        activate: "활성화",
+        change_pwd: "비밀번호 변경",
+        result: "결과",
+        log: "로그 보기",
+        select: "선택",
+        student: "학생",
+        staff: "교직원",
+        outsourcing: "외주",
+        direct: "직접 입력",
+        cmcc_type: "CMCC 계정 유형",
+        cmcc_normal: "기본 비밀번호",
+        cmcc_changed: "변경된 비밀번호",
+        isp_cdu: "캠퍼스 네트워크(학생 ID)",
+        isp_cmcc: "중국모바일(전화번호)",
+        isp_ct: "중국전신(전화번호)",
+        isp_cu: "중국연통(전화번호)",
+        activating: "활성화 중...",
+        activating_wait: "활성화 중입니다. 잠시 기다려주세요...",
+        success: "✅ 활성화 성공",
+        failed: "❌ 활성화 실패",
+        error_code: "오류 코드",
+        tip: "팁",
+        account_used: "계정",
+        iface_used: "인터페이스",
+        mac: "MAC",
+        ip: "IP",
+        no_ip: "없음",
+        select_isp: "ISP를 선택하세요",
+        request_failed: "요청 실패, 네트워크 연결을 확인하세요",
+        loading_log: "로그 로딩 중...",
+        load_log_failed: "로그 로딩 실패",
+        no_log: "로그 없음",
+        log_file: "로그 파일",
+        account_cdu: "학생 ID",
+        account_cdu_placeholder: "학생 ID를 입력하세요",
+        account_cmcc: "전화번호",
+        account_cmcc_placeholder: "전화번호를 입력하세요",
+        account_ct: "전화번호",
+        account_ct_placeholder: "전화번호를 입력하세요",
+        account_cu: "전화번호",
+        account_cu_placeholder: "전화번호를 입력하세요",
+        account_direct: "PPPoE 계정",
+        account_direct_placeholder: "전체 PPPoE 계정을 입력하세요(@도메인 포함)",
+        pwd_unified: "통합 인증 비밀번호를 입력하세요",
+        pwd_cmcc_normal: "기본 비밀번호는 전화번호의 뒤 6자리입니다",
+        pwd_cmcc_changed: "새 비밀번호를 입력하세요",
+        pwd_ct: "기본 비밀번호는 전화번호의 뒤 8자리입니다",
+        pwd_cu: "기본 비밀번호는 신분증 뒤 6자리입니다",
+        pwd_direct: "PPPoE 계정 비밀번호를 입력하세요",
+        full_account: "전체 계정: ",
+        alert_cdu: "통합 인증 페이지로 이동하여 비밀번호 변경",
+        alert_cmcc: "SMS 'XGKDMM******'를 10086으로 전송",
+        alert_ct: "SMS '重置宽带密码'를 10001로 전송",
+        alert_cu: "중국연통 온라인 비즈니스 홀 APP를 열어 브로드밴드 비밀번호 변경"
+      },
+      th: {
+        title: "การเปิดใช้งานบัญชี PPPoE",
+        name: "ชื่อ",
+        name_placeholder: "กรอกชื่อของคุณ",
+        role: "บทบาท",
+        isp: "ISP",
+        account: "บัญชี",
+        password: "รหัสผ่าน",
+        activate: "เปิดใช้งาน",
+        change_pwd: "เปลี่ยนรหัสผ่าน",
+        result: "ผลลัพธ์",
+        log: "ดูบันทึก",
+        select: "เลือก",
+        student: "นักเรียน",
+        staff: "บุคลากร",
+        outsourcing: "จ้างงานภายนอก",
+        direct: "ป้อนโดยตรง",
+        cmcc_type: "ประเภทบัญชี CMCC",
+        cmcc_normal: "รหัสผ่านเริ่มต้น",
+        cmcc_changed: "รหัสผ่านที่เปลี่ยนแล้ว",
+        isp_cdu: "เครือข่ายวิทยาเขต (รหัสนักเรียน)",
+        isp_cmcc: "China Mobile (หมายเลขโทรศัพท์)",
+        isp_ct: "China Telecom (หมายเลขโทรศัพท์)",
+        isp_cu: "China Unicom (หมายเลขโทรศัพท์)",
+        activating: "กำลังเปิดใช้งาน...",
+        activating_wait: "กำลังเปิดใช้งาน กรุณารอสักครู่...",
+        success: "✅ เปิดใช้งานสำเร็จ",
+        failed: "❌ การเปิดใช้งานล้มเหลว",
+        error_code: "รหัสข้อผิดพลาด",
+        tip: "เคล็ดลับ",
+        account_used: "บัญชี",
+        iface_used: "อินเทอร์เฟซ",
+        mac: "MAC",
+        ip: "IP",
+        no_ip: "ไม่มี",
+        select_isp: "กรุณาเลือก ISP",
+        request_failed: "คำขอล้มเหลว กรุณาตรวจสอบการเชื่อมต่อเครือข่าย",
+        loading_log: "กำลังโหลดบันทึก...",
+        load_log_failed: "โหลดบันทึกล้มเหลว",
+        no_log: "ไม่มีบันทึก",
+        log_file: "ไฟล์บันทึก",
+        account_cdu: "รหัสนักเรียน",
+        account_cdu_placeholder: "กรอกรหัสนักเรียนของคุณ",
+        account_cmcc: "หมายเลขโทรศัพท์",
+        account_cmcc_placeholder: "กรอกหมายเลขโทรศัพท์ของคุณ",
+        account_ct: "หมายเลขโทรศัพท์",
+        account_ct_placeholder: "กรอกหมายเลขโทรศัพท์ของคุณ",
+        account_cu: "หมายเลขโทรศัพท์",
+        account_cu_placeholder: "กรอกหมายเลขโทรศัพท์ของคุณ",
+        account_direct: "บัญชี PPPoE",
+        account_direct_placeholder: "กรอกบัญชี PPPoE ทั้งหมด (รวม @โดเมน)",
+        pwd_unified: "กรอกรหัสผ่านการรับรองความถูกต้องรวม",
+        pwd_cmcc_normal: "รหัสผ่านเริ่มต้นคือ 6 หลักสุดท้ายของหมายเลขโทรศัพท์",
+        pwd_cmcc_changed: "กรอกรหัสผ่านใหม่",
+        pwd_ct: "รหัสผ่านเริ่มต้นคือ 8 หลักสุดท้ายของหมายเลขโทรศัพท์",
+        pwd_cu: "รหัสผ่านเริ่มต้นคือ 6 หลักสุดท้ายของบัตรประจำตัว",
+        pwd_direct: "กรอกรหัสผ่านบัญชี PPPoE",
+        full_account: "บัญชีทั้งหมด: ",
+        alert_cdu: "ไปที่หน้ารับรองความถูกต้องรวมเพื่อเปลี่ยนรหัสผ่าน",
+        alert_cmcc: "ส่ง SMS 'XGKDMM******' ถึง 10086",
+        alert_ct: "ส่ง SMS '重置宽带密码' ถึง 10001",
+        alert_cu: "เปิดแอป China Unicom Online Business Hall เพื่อเปลี่ยนรหัสผ่านบรอดแบนด์"
+      },
+      vi: {
+        title: "Kích hoạt tài khoản PPPoE",
+        name: "Tên",
+        name_placeholder: "Nhập tên của bạn",
+        role: "Vai trò",
+        isp: "ISP",
+        account: "Tài khoản",
+        password: "Mật khẩu",
+        activate: "Kích hoạt",
+        change_pwd: "Đổi mật khẩu",
+        result: "Kết quả",
+        log: "Xem nhật ký",
+        select: "Chọn",
+        student: "Sinh viên",
+        staff: "Nhân viên",
+        outsourcing: "Thuê ngoài",
+        direct: "Nhập trực tiếp",
+        cmcc_type: "Loại tài khoản CMCC",
+        cmcc_normal: "Mật khẩu mặc định",
+        cmcc_changed: "Mật khẩu đã thay đổi",
+        isp_cdu: "Mạng trường (ID sinh viên)",
+        isp_cmcc: "China Mobile (Số điện thoại)",
+        isp_ct: "China Telecom (Số điện thoại)",
+        isp_cu: "China Unicom (Số điện thoại)",
+        activating: "Đang kích hoạt...",
+        activating_wait: "Đang kích hoạt, vui lòng đợi...",
+        success: "✅ Kích hoạt thành công",
+        failed: "❌ Kích hoạt thất bại",
+        error_code: "Mã lỗi",
+        tip: "Mẹo",
+        account_used: "Tài khoản",
+        iface_used: "Giao diện",
+        mac: "MAC",
+        ip: "IP",
+        no_ip: "Không có",
+        select_isp: "Vui lòng chọn ISP",
+        request_failed: "Yêu cầu thất bại, vui lòng kiểm tra kết nối mạng",
+        loading_log: "Đang tải nhật ký...",
+        load_log_failed: "Tải nhật ký thất bại",
+        no_log: "Không có nhật ký",
+        log_file: "Tệp nhật ký",
+        account_cdu: "ID sinh viên",
+        account_cdu_placeholder: "Nhập ID sinh viên của bạn",
+        account_cmcc: "Số điện thoại",
+        account_cmcc_placeholder: "Nhập số điện thoại của bạn",
+        account_ct: "Số điện thoại",
+        account_ct_placeholder: "Nhập số điện thoại của bạn",
+        account_cu: "Số điện thoại",
+        account_cu_placeholder: "Nhập số điện thoại của bạn",
+        account_direct: "Tài khoản PPPoE",
+        account_direct_placeholder: "Nhập tài khoản PPPoE đầy đủ (bao gồm @miền)",
+        pwd_unified: "Nhập mật khẩu xác thực thống nhất",
+        pwd_cmcc_normal: "Mật khẩu mặc định là 6 chữ số cuối của số điện thoại",
+        pwd_cmcc_changed: "Nhập mật khẩu mới",
+        pwd_ct: "Mật khẩu mặc định là 8 chữ số cuối của số điện thoại",
+        pwd_cu: "Mật khẩu mặc định là 6 chữ số cuối của thẻ căn cước",
+        pwd_direct: "Nhập mật khẩu tài khoản PPPoE",
+        full_account: "Tài khoản đầy đủ: ",
+        alert_cdu: "Đi tới trang xác thực thống nhất để thay đổi mật khẩu",
+        alert_cmcc: "Gửi SMS 'XGKDMM******' đến 10086",
+        alert_ct: "Gửi SMS '重置宽带密码' đến 10001",
+        alert_cu: "Mở ứng dụng China Unicom Online Business Hall để thay đổi mật khẩu băng thông rộng"
+      },
+      ur: {
+        title: "PPPoE اکاؤنٹ کی فعالکاری",
+        name: "نام",
+        name_placeholder: "اپنا نام درج کریں",
+        role: "کردار",
+        isp: "ISP",
+        account: "اکاؤنٹ",
+        password: "پاس ورڈ",
+        activate: "فعال کریں",
+        change_pwd: "پاس ورڈ تبدیل کریں",
+        result: "نتیجہ",
+        log: "لاگز دیکھیں",
+        select: "انتخاب کریں",
+        student: "طالب علم",
+        staff: "اسٹاف",
+        outsourcing: "آؤٹ سورسنگ",
+        direct: "براہ راست ان پٹ",
+        cmcc_type: "CMCC اکاؤنٹ کی قسم",
+        cmcc_normal: "ڈیفالٹ پاس ورڈ",
+        cmcc_changed: "بدلا ہوا پاس ورڈ",
+        isp_cdu: "کیمپس نیٹ ورک (طالب علم ID)",
+        isp_cmcc: "چائنا موبائل (فون نمبر)",
+        isp_ct: "چائنا ٹیلی کام (فون نمبر)",
+        isp_cu: "چائنا یونی کام (فون نمبر)",
+        activating: "فعالکاری جاری ہے...",
+        activating_wait: "فعالکاری ہو رہی ہے، براہ کرم انتظار کریں...",
+        success: "✅ فعالکاری کامیاب",
+        failed: "❌ فعالکاری ناکام",
+        error_code: "خرابی کا کوڈ",
+        tip: "مشورہ",
+        account_used: "اکاؤنٹ",
+        iface_used: "انٹرفیس",
+        mac: "MAC",
+        ip: "IP",
+        no_ip: "کوئی نہیں",
+        select_isp: "براہ کرم ISP منتخب کریں",
+        request_failed: "درخواست ناکام، براہ کرم اپنی نیٹ ورک کنکشن چیک کریں",
+        loading_log: "لاگز لوڈ ہو رہے ہیں...",
+        load_log_failed: "لاگز لوڈ کرنے میں ناکام",
+        no_log: "کوئی لاگز نہیں",
+        log_file: "لاگ فائل",
+        account_cdu: "طالب علم ID",
+        account_cdu_placeholder: "اپنا طالب علم ID درج کریں",
+        account_cmcc: "فون نمبر",
+        account_cmcc_placeholder: "اپنا فون نمبر درج کریں",
+        account_ct: "فون نمبر",
+        account_ct_placeholder: "اپنا فون نمبر درج کریں",
+        account_cu: "فون نمبر",
+        account_cu_placeholder: "اپنا فون نمبر درج کریں",
+        account_direct: "PPPoE اکاؤنٹ",
+        account_direct_placeholder: "مکمل PPPoE اکاؤنٹ درج کریں (@domain شامل ہے)",
+        pwd_unified: "موحد تصدیقی پاس ورڈ درج کریں",
+        pwd_cmcc_normal: "ڈیفالٹ پاس ورڈ فون نمبر کے آخری 6 ہندسے ہیں",
+        pwd_cmcc_changed: "نیا پاس ورڈ درج کریں",
+        pwd_ct: "ڈیفالٹ پاس ورڈ فون نمبر کے آخری 8 ہندسے ہیں",
+        pwd_cu: "ڈیفالٹ پاس ورڈ شناختی کارڈ کے آخری 6 ہندسے ہیں",
+        pwd_direct: "PPPoE اکاؤنٹ پاس ورڈ درج کریں",
+        full_account: "مکمل اکاؤنٹ: ",
+        alert_cdu: "موحد تصدیقی صفحے پر جائیں اور پاس ورڈ تبدیل کریں",
+        alert_cmcc: "SMS 'XGKDMM******' 10086 پر بھیجیں",
+        alert_ct: "SMS '重置宽带密码' 10001 پر بھیجیں",
+        alert_cu: "چائنا یونی کام آن لائن بزنس ہال ایپ کھولیں اور براڈ بینڈ پاس ورڈ تبدیل کریں"
+      },
+      hi: {
+        title: "PPPoE खाता सक्रियण",
+        name: "नाम",
+        name_placeholder: "अपना नाम दर्ज करें",
+        role: "भूमिका",
+        isp: "ISP",
+        account: "खाता",
+        password: "पासवर्ड",
+        activate: "सक्रिय करें",
+        change_pwd: "पासवर्ड बदलें",
+        result: "परिणाम",
+        log: "लॉग देखें",
+        select: "चुनें",
+        student: "छात्र",
+        staff: "कर्मचारी",
+        outsourcing: "आउटसोर्सिंग",
+        direct: "प्रत्यक्ष इनपुट",
+        cmcc_type: "CMCC खाता प्रकार",
+        cmcc_normal: "डिफ़ॉल्ट पासवर्ड",
+        cmcc_changed: "बदला गया पासवर्ड",
+        isp_cdu: "कैंपस नेटवर्क (छात्र ID)",
+        isp_cmcc: "चाइना मोबाइल (फोन नंबर)",
+        isp_ct: "चाइना टेलीकॉम (फोन नंबर)",
+        isp_cu: "चाइना यूनिकॉम (फोन नंबर)",
+        activating: "सक्रियण हो रहा है...",
+        activating_wait: "सक्रियण हो रहा है, कृपया प्रतीक्षा करें...",
+        success: "✅ सक्रियण सफल",
+        failed: "❌ सक्रियण विफल",
+        error_code: "त्रुटि कोड",
+        tip: "सुझाव",
+        account_used: "खाता",
+        iface_used: "इंटरफ़ेस",
+        mac: "MAC",
+        ip: "IP",
+        no_ip: "कोई नहीं",
+        select_isp: "कृपया ISP चुनें",
+        request_failed: "अनुरोध विफल, कृपया अपना नेटवर्क कनेक्शन जांचें",
+        loading_log: "लॉग लोड हो रहे हैं...",
+        load_log_failed: "लॉग लोड करने में विफल",
+        no_log: "कोई लॉग नहीं",
+        log_file: "लॉग फ़ाइल",
+        account_cdu: "छात्र ID",
+        account_cdu_placeholder: "अपना छात्र ID दर्ज करें",
+        account_cmcc: "फोन नंबर",
+        account_cmcc_placeholder: "अपना फोन नंबर दर्ज करें",
+        account_ct: "फोन नंबर",
+        account_ct_placeholder: "अपना फोन नंबर दर्ज करें",
+        account_cu: "फोन नंबर",
+        account_cu_placeholder: "अपना फोन नंबर दर्ज करें",
+        account_direct: "PPPoE खाता",
+        account_direct_placeholder: "पूर्ण PPPoE खाता दर्ज करें (@domain शामिल है)",
+        pwd_unified: "एकीकृत प्रमाणीकरण पासवर्ड दर्ज करें",
+        pwd_cmcc_normal: "डिफ़ॉल्ट पासवर्ड फोन नंबर के अंतिम 6 अंक हैं",
+        pwd_cmcc_changed: "नया पासवर्ड दर्ज करें",
+        pwd_ct: "डिफ़ॉल्ट पासवर्ड फोन नंबर के अंतिम 8 अंक हैं",
+        pwd_cu: "डिफ़ॉल्ट पासवर्ड पहचान पत्र के अंतिम 6 अंक हैं",
+        pwd_direct: "PPPoE खाता पासवर्ड दर्ज करें",
+        full_account: "पूर्ण खाता: ",
+        alert_cdu: "पासवर्ड बदलने के लिए एकीकृत प्रमाणीकरण पृष्ठ पर जाएं",
+        alert_cmcc: "SMS 'XGKDMM******' 10086 पर भेजें",
+        alert_ct: "SMS '重置宽带密码' 10001 पर भेजें",
+        alert_cu: "ब्रॉडबैंड पासवर्ड बदलने के लिए चाइना यूनिकॉम ऑनलाइन बिजनेस हॉल ऐप खोलें"
+      },
+      ar: {
+        title: "تنشيط حساب PPPoE",
+        name: "الاسم",
+        name_placeholder: "أدخل اسمك",
+        role: "الدور",
+        isp: "مزود الخدمة",
+        account: "الحساب",
+        password: "كلمة المرور",
+        activate: "تنشيط",
+        change_pwd: "تغيير كلمة المرور",
+        result: "النتيجة",
+        log: "عرض السجلات",
+        select: "اختر",
+        student: "طالب",
+        staff: "موظف",
+        outsourcing: "مصادر خارجية",
+        direct: "إدخال مباشر",
+        cmcc_type: "نوع حساب CMCC",
+        cmcc_normal: "كلمة المرور الافتراضية",
+        cmcc_changed: "كلمة المرور المغيرة",
+        isp_cdu: "شبكة الحرم الجامعي (معرف الطالب)",
+        isp_cmcc: "China Mobile (رقم الهاتف)",
+        isp_ct: "China Telecom (رقم الهاتف)",
+        isp_cu: "China Unicom (رقم الهاتف)",
+        activating: "جارٍ التنشيط...",
+        activating_wait: "جارٍ التنشيط، يرجى الانتظار...",
+        success: "✅ التنشيط ناجح",
+        failed: "❌ فشل التنشيط",
+        error_code: "رمز الخطأ",
+        tip: "تلميح",
+        account_used: "الحساب",
+        iface_used: "الواجهة",
+        mac: "MAC",
+        ip: "IP",
+        no_ip: "لا يوجد",
+        select_isp: "الرجاء اختيار مزود الخدمة",
+        request_failed: "فشل الطلب، يرجى التحقق من اتصال الشبكة",
+        loading_log: "جارٍ تحميل السجلات...",
+        load_log_failed: "فشل تحميل السجلات",
+        no_log: "لا توجد سجلات",
+        log_file: "ملف السجل",
+        account_cdu: "معرف الطالب",
+        account_cdu_placeholder: "أدخل معرف الطالب الخاص بك",
+        account_cmcc: "رقم الهاتف",
+        account_cmcc_placeholder: "أدخل رقم هاتفك",
+        account_ct: "رقم الهاتف",
+        account_ct_placeholder: "أدخل رقم هاتفك",
+        account_cu: "رقم الهاتف",
+        account_cu_placeholder: "أدخل رقم هاتفك",
+        account_direct: "حساب PPPoE",
+        account_direct_placeholder: "أدخل حساب PPPoE الكامل (بما في ذلك @domain)",
+        pwd_unified: "أدخل كلمة مرور المصادقة الموحدة",
+        pwd_cmcc_normal: "كلمة المرور الافتراضية هي آخر 6 أرقام من رقم الهاتف",
+        pwd_cmcc_changed: "أدخل كلمة المرور الجديدة",
+        pwd_ct: "كلمة المرور الافتراضية هي آخر 8 أرقام من رقم الهاتف",
+        pwd_cu: "كلمة المرور الافتراضية هي آخر 6 أرقام من بطاقة الهوية",
+        pwd_direct: "أدخل كلمة مرور حساب PPPoE",
+        full_account: "الحساب الكامل: ",
+        alert_cdu: "الانتقال إلى صفحة المصادقة الموحدة لتغيير كلمة المرور",
+        alert_cmcc: "إرسال رسالة نصية 'XGKDMM******' إلى 10086",
+        alert_ct: "إرسال رسالة نصية '重置宽带密码' إلى 10001",
+        alert_cu: "فتح تطبيق China Unicom Online Business Hall لتغيير كلمة مرور النطاق العريض"
+      }
+    };
+
+    const langSelect = document.getElementById("langSelect");
+    const defaultLang = navigator.language.startsWith("en") ? "en" : "zh";
+    langSelect.value = defaultLang;
+    applyLang(defaultLang);
+
+    langSelect.addEventListener("change", () => applyLang(langSelect.value));
+
+    function applyLang(lang) {
+      const langMap = {
+        "zh": "zh-CN",
+        "en": "en",
+        "fr": "fr",
+        "es": "es",
+        "ja": "ja",
+        "ko": "ko",
+        "th": "th",
+        "vi": "vi",
+        "ur": "ur",
+        "hi": "hi",
+        "ar": "ar"
+      };
+      document.documentElement.lang = langMap[lang] || "zh-CN";
+      
+      // 更新所有带有 data-i18n 属性的元素
+      document.querySelectorAll("[data-i18n]").forEach(el => {
+        const key = el.dataset.i18n;
+        if (i18n[lang][key]) {
+          if (el.tagName === "INPUT" && el.hasAttribute("placeholder")) {
+            // 对于输入框，更新placeholder
+            const placeholderKey = el.dataset.i18nPlaceholder;
+            if (placeholderKey && i18n[lang][placeholderKey]) {
+              el.placeholder = i18n[lang][placeholderKey];
+            }
+          } else {
+            el.textContent = i18n[lang][key];
+          }
+        }
+      });
+      
+      // 更新动态内容
+      updateDynamicContent(lang);
+    }
+
+    function updateDynamicContent(lang) {
+      const isp = ispSelect.value;
+      const submitBtn = document.querySelector('#pppoeForm button[type="submit"]');
+      
+      // 更新按钮文本
+      if (submitBtn) {
+        submitBtn.textContent = i18n[lang].activate;
+      }
+      
+      // 更新标签和提示
+      if (isp === "cdu") {
+        usernameLabel.textContent = i18n[lang].account_cdu;
+        usernameInput.placeholder = i18n[lang].account_cdu_placeholder;
+        passwordHint.textContent = i18n[lang].pwd_unified;
+      } else if (isp === "cmccgx") {
+        usernameLabel.textContent = i18n[lang].account_cmcc;
+        usernameInput.placeholder = i18n[lang].account_cmcc_placeholder;
+        const cmccType = document.querySelector('input[name="cmccType"]:checked')?.value;
+        if (cmccType === "normal") {
+          passwordHint.textContent = i18n[lang].pwd_cmcc_normal;
+        } else {
+          passwordHint.textContent = i18n[lang].pwd_cmcc_changed;
+        }
+      } else if (isp === "96301") {
+        usernameLabel.textContent = i18n[lang].account_ct;
+        usernameInput.placeholder = i18n[lang].account_ct_placeholder;
+        passwordHint.textContent = i18n[lang].pwd_ct;
+      } else if (isp === "10010") {
+        usernameLabel.textContent = i18n[lang].account_cu;
+        usernameInput.placeholder = i18n[lang].account_cu_placeholder;
+        passwordHint.textContent = i18n[lang].pwd_cu;
+      } else if (isp === "direct") {
+        usernameLabel.textContent = i18n[lang].account_direct;
+        usernameInput.placeholder = i18n[lang].account_direct_placeholder;
+        passwordHint.textContent = i18n[lang].pwd_direct;
+      } else {
+        usernameLabel.textContent = i18n[lang].account;
+        usernameInput.placeholder = "";
+        passwordHint.textContent = "";
+      }
+    }
+    
     // ISP切换
     ispSelect.addEventListener('change', () => {
+      const lang = langSelect.value;
+      
       if (ispSelect.value === "cmccgx") {
         cmccOptions.classList.remove('hidden');
-        usernameLabel.textContent = "手机号";
-        usernameInput.placeholder = "请输入手机号";
+        usernameLabel.textContent = i18n[lang].account_cmcc;
+        usernameInput.placeholder = i18n[lang].account_cmcc_placeholder;
+        changePasswordBtn.classList.remove('hidden');
+        changePasswordBtn.textContent = i18n[lang].change_pwd;
       } else if (ispSelect.value === "cdu") {
         cmccOptions.classList.add('hidden');
-        usernameLabel.textContent = "学工号";
-        usernameInput.placeholder = "请输入学工号";
+        usernameLabel.textContent = i18n[lang].account_cdu;
+        usernameInput.placeholder = i18n[lang].account_cdu_placeholder;
+        changePasswordBtn.classList.remove('hidden');
+        changePasswordBtn.textContent = i18n[lang].change_pwd;
       } else if (ispSelect.value === "direct") {
         cmccOptions.classList.add('hidden');
-        usernameLabel.textContent = "PPPoE账号";
-        usernameInput.placeholder = "请输入完整的PPPoE账号（包含@域名）";
+        usernameLabel.textContent = i18n[lang].account_direct;
+        usernameInput.placeholder = i18n[lang].account_direct_placeholder;
+        changePasswordBtn.classList.add('hidden');
       } else {
         cmccOptions.classList.add('hidden');
-        usernameLabel.textContent = "手机号";
-        usernameInput.placeholder = "请输入手机号";
+        usernameLabel.textContent = i18n[lang].account_cmcc;
+        usernameInput.placeholder = i18n[lang].account_cmcc_placeholder;
+        changePasswordBtn.classList.remove('hidden');
+        changePasswordBtn.textContent = i18n[lang].change_pwd;
       }
       updatePreview();
       updatePasswordHint();
+    });
+    
+    // 修改密码按钮点击事件
+    changePasswordBtn.addEventListener('click', () => {
+      const isp = ispSelect.value;
+      const lang = langSelect.value;
+      
+      if (isp === "cdu") {
+        // 学工号：跳转到统一身份认证页面
+        window.open('https://id.cdu.edu.cn/login?service=https:%2F%2Fmyapp.cdu.edu.cn%2F', '_blank');
+      } else if (isp === "cmccgx") {
+        // 中国移动：弹出提示框
+        alert(i18n[lang].alert_cmcc);
+      } else if (isp === "10010") {
+        // 中国联通：弹出提示框
+        alert(i18n[lang].alert_cu);
+      } else if (isp === "96301") {
+        // 中国电信：弹出提示框
+        alert(i18n[lang].alert_ct);
+      }
     });
     
     togglePassword.addEventListener('click', () => {
@@ -360,6 +1204,7 @@
     });
     
     function updatePreview() {
+      const lang = langSelect.value;
       let baseUser = usernameInput.value.trim();
       const isp = ispSelect.value;
       
@@ -382,35 +1227,48 @@
       }
       
       const finalUsername = baseUser + "@" + isp;
-      accountPreview.textContent = "完整账号：" + finalUsername;
+      accountPreview.textContent = i18n[lang].full_account + finalUsername;
       accountPreview.classList.remove('hidden');
     }
     
     function updatePasswordHint() {
+      const lang = langSelect.value;
       const isp = ispSelect.value;
       const baseUser = usernameInput.value.trim();
       passwordInput.value = "";
       passwordHint.textContent = "";
       
-      if (!isp) return;
+      if (!isp) {
+        changePasswordBtn.classList.add('hidden');
+        return;
+      }
       
       if (isp === "cdu") {
-        passwordHint.textContent = "请输入统一身份认证密码";
+        passwordHint.textContent = i18n[lang].pwd_unified;
+        changePasswordBtn.classList.remove('hidden');
+        changePasswordBtn.textContent = i18n[lang].change_pwd;
       } else if (isp === "cmccgx") {
         const cmccType = document.querySelector('input[name="cmccType"]:checked')?.value;
         if (cmccType === "normal") {
           if (baseUser.length >= 6) passwordInput.value = baseUser.slice(-6);
-          passwordHint.textContent = "默认密码为手机号后6位，如已修改请填写正确密码";
+          passwordHint.textContent = i18n[lang].pwd_cmcc_normal;
         } else {
-          passwordHint.textContent = "请输入新密码";
+          passwordHint.textContent = i18n[lang].pwd_cmcc_changed;
         }
+        changePasswordBtn.classList.remove('hidden');
+        changePasswordBtn.textContent = i18n[lang].change_pwd;
       } else if (isp === "96301") {
         if (baseUser.length >= 8) passwordInput.value = baseUser.slice(-8);
-        passwordHint.textContent = "默认密码为手机号后8位，如已修改请填写正确密码";
+        passwordHint.textContent = i18n[lang].pwd_ct;
+        changePasswordBtn.classList.remove('hidden');
+        changePasswordBtn.textContent = i18n[lang].change_pwd;
       } else if (isp === "10010") {
-        passwordHint.textContent = "默认密码为身份证后6位，如已修改请填写正确密码";
+        passwordHint.textContent = i18n[lang].pwd_cu;
+        changePasswordBtn.classList.remove('hidden');
+        changePasswordBtn.textContent = i18n[lang].change_pwd;
       } else if (isp === "direct") {
-        passwordHint.textContent = "请输入PPPoE账号密码";
+        passwordHint.textContent = i18n[lang].pwd_direct;
+        changePasswordBtn.classList.add('hidden');
       }
     }
     
@@ -421,15 +1279,17 @@
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       
+      const lang = langSelect.value;
+      
       // 获取提交按钮
       const submitBtn = form.querySelector('button[type="submit"]');
       
       // 锁定按钮
       submitBtn.disabled = true;
-      submitBtn.textContent = "激活中...";
+      submitBtn.textContent = i18n[lang].activating;
       
       resultBox.classList.remove('hidden');
-      resultContent.innerHTML = "<p class='info-text'>正在激活，请稍候...</p>";
+      resultContent.innerHTML = "<p class='info-text'>" + i18n[lang].activating_wait + "</p>";
       
       const data = {
         username: usernameInput.value.trim(),
@@ -440,10 +1300,10 @@
       };
       
       if (!data.isp) {
-        resultContent.innerHTML = "<p class='error'>❌ 请选择运营商</p>";
+        resultContent.innerHTML = "<p class='error'>❌ " + i18n[lang].select_isp + "</p>";
         // 恢复按钮
         submitBtn.disabled = false;
-        submitBtn.textContent = "激活账号";
+        submitBtn.textContent = i18n[lang].activate;
         return;
       }
       
@@ -468,54 +1328,56 @@
         
         if (resp.success) {
           resultContent.innerHTML = `
-            <p class="success">✅ 激活成功</p>
-            <p class="info-text">账号：${resp.username}</p>
-            <p class="info-text">使用接口：${resp.iface}</p>
-            <p class="info-text">MAC：${resp.mac}</p>
-            <p class="info-text">IP：${resp.ip || '无'}</p>
+            <p class="success">${i18n[lang].success}</p>
+            <p class="info-text">${i18n[lang].account_used}：${resp.username}</p>
+            <p class="info-text">${i18n[lang].iface_used}：${resp.iface}</p>
+            <p class="info-text">${i18n[lang].mac}：${resp.mac}</p>
+            <p class="info-text">${i18n[lang].ip}：${resp.ip || i18n[lang].no_ip}</p>
           `;
         } else {
           // 优先使用后端返回的详细错误消息，如果没有则使用错误码映射
           const userTip = resp.error_message || errorMessages[resp.error_code] || "未知错误";
           resultContent.innerHTML = `
-            <p class="error">❌ 激活失败</p>
-            <p class="info-text">错误码：${resp.error_code}</p>
-            <p class="info-text">提示：${userTip}</p>
-            <p class="info-text">账号：${resp.username}</p>
-            <p class="info-text">使用接口：${resp.iface}</p>
+            <p class="error">${i18n[lang].failed}</p>
+            <p class="info-text">${i18n[lang].error_code}：${resp.error_code}</p>
+            <p class="info-text">${i18n[lang].tip}：${userTip}</p>
+            <p class="info-text">${i18n[lang].account_used}：${resp.username}</p>
+            <p class="info-text">${i18n[lang].iface_used}：${resp.iface}</p>
           `;
         }
         
-        logBox.textContent = resp.log || "无日志信息";
+        logBox.textContent = resp.log || i18n[lang].no_log;
       } catch (err) {
-        resultContent.innerHTML = "<p class='error'>请求失败，请检查网络连接</p>";
+        resultContent.innerHTML = "<p class='error'>" + i18n[lang].request_failed + "</p>";
       } finally {
         // 恢复按钮
         submitBtn.disabled = false;
-        submitBtn.textContent = "激活账号";
+        submitBtn.textContent = i18n[lang].activate;
       }
     });
     
     // 查看详细日志
     toggleLog.addEventListener('click', async () => {
+      const lang = langSelect.value;
+      
       if (logBox.classList.contains('hidden')) {
         logBox.classList.remove('hidden');
-        logBox.innerHTML = "<p class='log-loading'>正在加载日志...</p>";
+        logBox.innerHTML = "<p class='log-loading'>" + i18n[lang].loading_log + "</p>";
         
         try {
           const res = await fetch('/api/dial-logs');
           if (res.ok) {
             const data = await res.json();
             if (data.success && data.log_content) {
-              logBox.textContent = `【日志文件：${data.log_file}】\n\n${data.log_content}`;
+              logBox.textContent = `【${i18n[lang].log_file}：${data.log_file}】\n\n${data.log_content}`;
             } else {
-              logBox.textContent = data.error || "暂无日志记录";
+              logBox.textContent = data.error || i18n[lang].no_log;
             }
           } else {
-            logBox.textContent = "加载日志失败";
+            logBox.textContent = i18n[lang].load_log_failed;
           }
         } catch (err) {
-          logBox.textContent = "加载日志失败";
+          logBox.textContent = i18n[lang].load_log_failed;
         }
       } else {
         logBox.classList.add('hidden');
