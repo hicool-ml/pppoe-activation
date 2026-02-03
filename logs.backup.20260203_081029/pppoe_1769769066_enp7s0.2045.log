@@ -1,0 +1,39 @@
+Send PPPOE Discovery V1T1 PADI session 0x0 length 12
+ dst ff:ff:ff:ff:ff:ff  src 02:40:7f:25:18:e2
+ [service-name] [host-uniq 1a 0c 00 00]
+Recv PPPOE Discovery V1T1 PADO session 0x0 length 46
+ dst 02:40:7f:25:18:e2  src 4c:6d:58:4c:37:d8
+ [AC-name CDU-BRAS-1] [host-uniq 1a 0c 00 00] [service-name] [AC-cookie a8 2a 02 0b d4 07 b2 b7 75 f0 7b 16 8a 63 26 52]
+Send PPPOE Discovery V1T1 PADR session 0x0 length 32
+ dst 4c:6d:58:4c:37:d8  src 02:40:7f:25:18:e2
+ [service-name] [host-uniq 1a 0c 00 00] [AC-cookie a8 2a 02 0b d4 07 b2 b7 75 f0 7b 16 8a 63 26 52]
+Recv PPPOE Discovery V1T1 PADS session 0x166 length 46
+ dst 02:40:7f:25:18:e2  src 4c:6d:58:4c:37:d8
+ [service-name] [host-uniq 1a 0c 00 00] [AC-name CDU-BRAS-1] [AC-cookie a8 2a 02 0b d4 07 b2 b7 75 f0 7b 16 8a 63 26 52]
+PPP session is 358
+Connected to 4C:6D:58:4C:37:D8 via interface enp7s0.2045
+using channel 220
+Using interface ppp46
+Connect: ppp46 <--> enp7s0.2045
+sent [LCP ConfReq id=0x1 <mru 1492> <magic 0x8db32117>]
+rcvd [LCP ConfReq id=0xda <mru 1492> <auth pap> <magic 0x53c7189a>]
+sent [LCP ConfAck id=0xda <mru 1492> <auth pap> <magic 0x53c7189a>]
+rcvd [LCP ConfAck id=0x1 <mru 1492> <magic 0x8db32117>]
+sent [LCP EchoReq id=0x0 magic=0x8db32117]
+sent [PAP AuthReq id=0x1 user="18608001027@cdu" password=<hidden>]
+rcvd [LCP EchoRep id=0x0 magic=0x53c7189a]
+sent [PAP AuthReq id=0x2 user="18608001027@cdu" password=<hidden>]
+sent [PAP AuthReq id=0x3 user="18608001027@cdu" password=<hidden>]
+sent [PAP AuthReq id=0x4 user="18608001027@cdu" password=<hidden>]
+sent [PAP AuthReq id=0x5 user="18608001027@cdu" password=<hidden>]
+rcvd [PAP AuthNak id=0x5 ""]
+PAP authentication failed
+sent [LCP TermReq id=0x2 "Failed to authenticate ourselves to peer"]
+rcvd [LCP TermReq id=0xdb]
+sent [LCP TermAck id=0xdb]
+Modem hangup
+Connection terminated.
+Send PPPOE Discovery V1T1 PADT session 0x166 length 28
+ dst 4c:6d:58:4c:37:d8  src 02:40:7f:25:18:e2
+ [host-uniq 1a 0c 00 00] [AC-cookie a8 2a 02 0b d4 07 b2 b7 75 f0 7b 16 8a 63 26 52]
+Sent PADT

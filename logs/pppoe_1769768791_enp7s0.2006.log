@@ -1,0 +1,6 @@
+Send PPPOE Discovery V1T1 PADI session 0x0 length 12
+ dst ff:ff:ff:ff:ff:ff  src 02:10:b5:83:2a:f4
+ [service-name] [host-uniq 7b 04 00 00]
+select (waitForPADO): Interrupted system call
+Timeout waiting for PADO packets
+Unable to complete PPPoE Discovery phase 1

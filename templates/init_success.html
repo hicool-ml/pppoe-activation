@@ -138,7 +138,7 @@
     <div class="container">
         <div class="success-icon">✓</div>
         <h1>配置成功！</h1>
-        <p class="subtitle">系统配置已完成，请按照以下步骤启动服务</p>
+        <p class="subtitle">系统配置已完成</p>
 
         <div class="config-info">
             <div class="config-item">
@@ -179,9 +179,37 @@
             </div>
         </div>
 
-        <div class="next-steps">
+        <div class="next-steps" id="restartNotice" style="display: {% if config.port_changed %}block{% else %}none{% endif %};">
+            <h3>⚠️ 需要重启容器</h3>
+            <div class="step">检测到端口配置已更改，需要重启容器使配置生效</div>
+            <div class="step">请执行以下命令重启容器：</div>
+            <div style="background: #28a745; color: white; padding: 15px; border-radius: 5px; font-family: 'Courier New', monospace; font-size: 14px; margin: 15px 0; text-align: center;">
+                docker restart pppoe-activation
+            </div>
+            <div class="step">或者在宿主机上执行：</div>
+            <div style="background: #007bff; color: white; padding: 15px; border-radius: 5px; font-family: 'Courier New', monospace; font-size: 14px; margin: 15px 0; text-align: center;">
+                cd /home/cdu/pppoe_Activation && docker restart pppoe-activation
+            </div>
+            <div class="step">重启后，请访问以下地址：</div>
+            <div style="text-align: center; margin: 15px 0;">
+                <div>
+                    用户激活页面：
+                    <a href="http://{{ request.host.split(':')[0] }}:{{ config.app_port }}/" class="button" target="_blank">
+                        http://{{ request.host.split(':')[0] }}:{{ config.app_port }}/
+                    </a>
+                </div>
+                <div style="margin-top: 10px;">
+                    管理后台页面：
+                    <a href="http://{{ request.host.split(':')[0] }}:{{ config.admin_port }}/dashboard" class="button" target="_blank">
+                        http://{{ request.host.split(':')[0] }}:{{ config.admin_port }}/dashboard
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <div class="next-steps" id="nextSteps" style="display: {% if config.port_changed %}none{% else %}block{% endif %};">
             <h3>📝 下一步操作</h3>
-            <div class="step">✅ 配置已保存，主应用容器已自动重启</div>
+            <div class="step">✅ 配置已保存</div>
             <div class="step">请访问以下地址：</div>
             <div style="text-align: center; margin: 15px 0;">
                 <div>

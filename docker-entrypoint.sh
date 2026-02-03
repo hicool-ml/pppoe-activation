@@ -32,11 +32,48 @@ log_error() {
 check_env_vars() {
     log_info "检查环境变量..."
     
-    # 设置默认值
-    export APP_PORT=${APP_PORT:-80}
-    export ADMIN_PORT=${ADMIN_PORT:-8081}
+    # 检查数据库文件是否存在
+    if [[ ! -f /opt/pppoe-activation/instance/database.db ]]; then
+        log_info "数据库文件不存在，使用环境变量或默认值"
+        export APP_PORT=${APP_PORT:-80}
+        export ADMIN_PORT=${ADMIN_PORT:-8081}
+        log_info "使用默认应用端口: $APP_PORT"
+        log_info "管理端口: $ADMIN_PORT"
+        return 0
+    fi
     
-    log_info "应用端口: $APP_PORT"
+    # 从数据库读取应用端口配置（优先读取大写的APP_PORT）
+    DB_APP_PORT=$(python3 -c '
+import sys
+sys.path.insert(0, "/opt/pppoe-activation")
+from sqlalchemy import create_engine, text
+engine = create_engine("sqlite:////opt/pppoe-activation/instance/database.db")
+with engine.connect() as conn:
+    # 优先读取APP_PORT（大写）
+    result = conn.execute(text("SELECT value FROM config WHERE name = '\''APP_PORT'\''"))
+    row = result.fetchone()
+    if row:
+        print(row[0])
+    else:
+        # 如果没有APP_PORT，尝试读取app_port（小写）
+        result = conn.execute(text("SELECT value FROM config WHERE name = '\''app_port'\''"))
+        row = result.fetchone()
+        if row:
+            print(row[0])
+        else:
+            print("")
+' 2>/dev/null || echo "")
+    
+    # 如果数据库中有配置，使用数据库配置；否则使用环境变量或默认值
+    if [[ -n "$DB_APP_PORT" ]]; then
+        export APP_PORT=$DB_APP_PORT
+        log_info "从数据库读取应用端口: $APP_PORT"
+    else
+        export APP_PORT=${APP_PORT:-80}
+        log_info "使用默认应用端口: $APP_PORT"
+    fi
+    
+    export ADMIN_PORT=${ADMIN_PORT:-8081}
     log_info "管理端口: $ADMIN_PORT"
 }
 
@@ -147,6 +184,12 @@ print(f'[SUMMARY] 成功启用 {enabled_count} 个网卡，跳过 {skipped_count
 configure_vlan_interfaces() {
     log_info "配置VLAN接口..."
     
+    # 检查数据库文件是否存在
+    if [[ ! -f /opt/pppoe-activation/instance/database.db ]]; then
+        log_info "数据库文件不存在，跳过VLAN配置"
+        return 0
+    fi
+    
     # 从数据库读取VLAN配置
     VLAN_CONFIG=$(python3 -c "
 import sys
@@ -164,7 +207,7 @@ with engine.connect() as conn:
             print('')
     else:
         print('')
-" 2>/dev/null)
+" 2>/dev/null || echo "")
     
     if [[ -n "$VLAN_CONFIG" ]]; then
         IFS='|' read -r net_mode base_interface vlan_id <<< "$VLAN_CONFIG"
@@ -210,6 +253,8 @@ for iface_data in interfaces_data:
     else
         log_info "未找到VLAN配置"
     fi
+    
+    return 0
 }
 
 # 启动主服务

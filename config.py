@@ -17,5 +17,5 @@ DEFAULT_VLAN_ID = None          # 仅 vlan 模式使用
 PPP_LOG_DIR = f'{BASE_DIR}/logs'
 
 # 服务端口配置
-APP_PORT = 80
+APP_PORT = 100
 ADMIN_PORT = 8081

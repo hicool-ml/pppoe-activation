@@ -15,7 +15,7 @@ import secrets
 from flask import Flask, render_template, request, jsonify, redirect, url_for, session
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from models import NetworkConfig, AdminUser
+from models import NetworkConfig, AdminUser, Config
 
 app = Flask(__name__)
 app.secret_key = 'your-super-secret-key-change-it-please'  # 请修改！
@@ -179,7 +179,29 @@ def get_current_config():
                     elif key == 'TZ':
                         config['tz'] = value
     
-    # 3. 从数据库读取网络配置（所有运行期配置，优先级最高）
+    # 3. 从数据库读取端口配置（优先级最高）
+    try:
+        session = SessionLocal()
+        # 读取APP_PORT
+        app_port_config = session.query(Config).filter(Config.name == 'APP_PORT').first()
+        if app_port_config:
+            try:
+                config['app_port'] = int(app_port_config.value)
+            except ValueError:
+                pass
+        
+        # 读取ADMIN_PORT
+        admin_port_config = session.query(Config).filter(Config.name == 'ADMIN_PORT').first()
+        if admin_port_config:
+            try:
+                config['admin_port'] = int(admin_port_config.value)
+            except ValueError:
+                pass
+        session.close()
+    except Exception as e:
+        print(f"从数据库读取端口配置失败: {e}")
+    
+    # 4. 从数据库读取网络配置（所有运行期配置，优先级最高）
     try:
         session = SessionLocal()
         net_config = session.query(NetworkConfig).first()
@@ -435,6 +457,30 @@ VLAN_ID={data.get('vlan_id', '')}
         session.commit()
         print(f"网络配置已保存到数据库: net_mode={net_config.net_mode}, base_interface={net_config.base_interface}, vlan_id={net_config.vlan_id}")
         
+        # 保存端口配置到数据库Config表
+        try:
+            # 保存APP_PORT
+            app_port_config = session.query(Config).filter(Config.name == 'APP_PORT').first()
+            if app_port_config:
+                app_port_config.value = str(data.get('app_port', 8080))
+            else:
+                app_port_config = Config(name='APP_PORT', value=str(data.get('app_port', 8080)))
+                session.add(app_port_config)
+            
+            # 保存ADMIN_PORT
+            admin_port_config = session.query(Config).filter(Config.name == 'ADMIN_PORT').first()
+            if admin_port_config:
+                admin_port_config.value = str(data.get('admin_port', 8081))
+            else:
+                admin_port_config = Config(name='ADMIN_PORT', value=str(data.get('admin_port', 8081)))
+                session.add(admin_port_config)
+            
+            session.commit()
+            print(f"端口配置已保存到数据库: APP_PORT={data.get('app_port', 8080)}, ADMIN_PORT={data.get('admin_port', 8081)}")
+        except Exception as e:
+            print(f"保存端口配置到数据库失败: {e}")
+            session.rollback()
+        
         # 如果是 VLAN 模式，创建所有 VLAN 子接口
         if net_config.net_mode == "vlan" and net_config.vlan_id:
             # 先删除旧的 VLAN 子接口（避免重复）
@@ -500,11 +546,18 @@ VLAN_ID={data.get('vlan_id', '')}
     with open(INIT_FLAG_FILE, 'w') as f:
         f.write('initialized')
     
-    # 立即重启主应用容器
+    # 立即重启主应用容器（通过Docker Socket API）
     try:
-        result = subprocess.run(['docker', 'restart', 'pppoe-activation'], 
-                              capture_output=True, text=True, timeout=10)
-        print(f"主应用容器重启命令已执行: {result.stdout}")
+        # 使用curl通过Docker Unix Socket重启容器
+        result = subprocess.run([
+            'curl', '--unix-socket', '/var/run/docker.sock',
+            '-X', 'POST', 'http://localhost/v1.41/containers/pppoe-activation/restart',
+            '-H', 'Content-Type: application/json'
+        ], capture_output=True, text=True, timeout=10)
+        if result.returncode == 0:
+            print(f"主应用容器重启命令已执行: {result.stdout}")
+        else:
+            print(f"重启命令返回错误: {result.stderr}")
     except Exception as e:
         print(f"重启主应用容器失败: {e}")
 
@@ -542,8 +595,31 @@ def api_config():
     elif request.method == 'POST':
         data = request.get_json()
         try:
+            # 检查端口是否发生变化
+            current_config = get_current_config()
+            port_changed = (
+                int(data.get('app_port', 8080)) != current_config['app_port'] or
+                int(data.get('admin_port', 8081)) != current_config['admin_port']
+            )
+            
+            # 保存配置（会自动重启容器）
             save_config(data)
-            return jsonify({'success': True, 'message': '配置保存成功'})
+            
+            # 如果端口发生变化，返回特殊消息
+            if port_changed:
+                return jsonify({
+                    'success': True,
+                    'message': '配置保存成功，容器正在重启中...',
+                    'port_changed': True,
+                    'restart_required': True
+                })
+            else:
+                return jsonify({
+                    'success': True,
+                    'message': '配置保存成功',
+                    'port_changed': False,
+                    'restart_required': False
+                })
         except Exception as e:
             return jsonify({'success': False, 'message': f'配置保存失败: {str(e)}'}), 500
 
@@ -551,14 +627,52 @@ def api_config():
 @app.route('/api/restart-status')
 @require_super_admin
 def restart_status():
-    """获取重启状态"""
+    """获取重启状态（通过Docker Socket API）"""
     try:
-        result = subprocess.run(['docker', 'ps', '-a', '--format', '{{.Status}}', 'pppoe-activation'],
-                              capture_output=True, text=True)
-        status = result.stdout.strip()
-        return jsonify({'status': status})
+        # 使用curl通过Docker Unix Socket获取容器状态
+        result = subprocess.run([
+            'curl', '--unix-socket', '/var/run/docker.sock',
+            'http://localhost/v1.41/containers/pppoe-activation/json'
+        ], capture_output=True, text=True)
+        
+        if result.returncode == 0:
+            import json
+            container_info = json.loads(result.stdout)
+            status = container_info.get('State', {}).get('Status', 'unknown')
+            return jsonify({'status': status})
+        else:
+            return jsonify({'status': 'error', 'message': result.stderr})
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)})
+
+
+@app.route('/api/restart-container', methods=['POST'])
+@require_super_admin
+def restart_container():
+    """重启容器（通过Docker Socket API）"""
+    try:
+        # 使用curl通过Docker Unix Socket重启容器
+        result = subprocess.run([
+            'curl', '--unix-socket', '/var/run/docker.sock',
+            '-X', 'POST', 'http://localhost/v1.41/containers/pppoe-activation/restart',
+            '-H', 'Content-Type: application/json'
+        ], capture_output=True, text=True, timeout=30)
+        
+        if result.returncode == 0:
+            return jsonify({
+                'success': True,
+                'message': '容器重启成功',
+                'output': result.stdout
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'message': f'容器重启失败: {result.stderr}'
+            }), 500
+    except subprocess.TimeoutExpired:
+        return jsonify({'success': False, 'message': '重启超时'}), 504
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'重启失败: {str(e)}'}), 500
 
 
 @app.route('/save', methods=['POST'])
@@ -566,14 +680,23 @@ def restart_status():
 def save():
     """保存配置并重启"""
     try:
+        # 检查端口是否发生变化
+        current_config = get_current_config()
+        new_app_port = int(request.form.get('app_port', 80))
+        new_admin_port = int(request.form.get('admin_port', 8081))
+        port_changed = (
+            new_app_port != current_config['app_port'] or
+            new_admin_port != current_config['admin_port']
+        )
+        
         data = {
             'interfaces': request.form.getlist('interfaces'),
             'data_path': request.form.get('data_path', './data'),
             'logs_path': request.form.get('logs_path', './logs'),
             'db_path': request.form.get('db_path', './instance/database.db'),
             'instance_path': request.form.get('instance_path', './instance'),
-            'app_port': int(request.form.get('app_port', 80)),
-            'admin_port': int(request.form.get('admin_port', 80)),
+            'app_port': new_app_port,
+            'admin_port': new_admin_port,
             'tz': request.form.get('tz', 'Asia/Shanghai'),
             'net_mode': request.form.get('net_mode', 'physical'),
             'vlan_id': request.form.get('vlan_id', '')
@@ -582,6 +705,10 @@ def save():
         print(f"接收到配置数据: net_mode={data['net_mode']}, vlan_id='{data['vlan_id']}'")
         
         save_config(data)
+        
+        # 传递端口变化信息到模板
+        data['port_changed'] = port_changed
+        data['restart_required'] = port_changed
         
         return render_template('init_success.html', config=data)
     except Exception as e:

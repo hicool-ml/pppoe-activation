@@ -27,6 +27,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     kmod \
     # 用户切换工具（用于以非root用户运行应用）
     gosu \
+    # Docker CLI（用于容器重启）
+    docker.io \
     # 清理缓存
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* \

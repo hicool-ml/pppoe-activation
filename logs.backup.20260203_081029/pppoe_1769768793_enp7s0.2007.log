@@ -1,0 +1,32 @@
+Send PPPOE Discovery V1T1 PADI session 0x0 length 12
+ dst ff:ff:ff:ff:ff:ff  src 02:2f:2d:ef:29:a2
+ [service-name] [host-uniq 62 05 00 00]
+Recv PPPOE Discovery V1T1 PADO session 0x0 length 46
+ dst 02:2f:2d:ef:29:a2  src 4c:6d:58:4c:37:d8
+ [AC-name CDU-BRAS-1] [host-uniq 62 05 00 00] [service-name] [AC-cookie 24 09 fb 98 23 d4 3b 66 af d4 7a 69 a7 de 85 d7]
+Send PPPOE Discovery V1T1 PADR session 0x0 length 32
+ dst 4c:6d:58:4c:37:d8  src 02:2f:2d:ef:29:a2
+ [service-name] [host-uniq 62 05 00 00] [AC-cookie 24 09 fb 98 23 d4 3b 66 af d4 7a 69 a7 de 85 d7]
+Recv PPPOE Discovery V1T1 PADS session 0x50 length 46
+ dst 02:2f:2d:ef:29:a2  src 4c:6d:58:4c:37:d8
+ [service-name] [host-uniq 62 05 00 00] [AC-name CDU-BRAS-1] [AC-cookie 24 09 fb 98 23 d4 3b 66 af d4 7a 69 a7 de 85 d7]
+PPP session is 80
+Connected to 4C:6D:58:4C:37:D8 via interface enp7s0.2007
+using channel 151
+Using interface ppp0
+Connect: ppp0 <--> enp7s0.2007
+sent [LCP ConfReq id=0x1 <mru 1492> <magic 0xf95d8076>]
+rcvd [LCP ConfReq id=0xd8 <mru 1492> <auth pap> <magic 0x377e019e>]
+sent [LCP ConfAck id=0xd8 <mru 1492> <auth pap> <magic 0x377e019e>]
+rcvd [LCP ConfAck id=0x1 <mru 1492> <magic 0xf95d8076>]
+sent [LCP EchoReq id=0x0 magic=0xf95d8076]
+sent [PAP AuthReq id=0x1 user="18608001027@cdu" password=<hidden>]
+rcvd [LCP EchoRep id=0x0 magic=0x377e019e]
+Terminating on signal 15
+sent [LCP TermReq id=0x2 "User request"]
+rcvd [LCP TermAck id=0x2]
+Connection terminated.
+Send PPPOE Discovery V1T1 PADT session 0x50 length 28
+ dst 4c:6d:58:4c:37:d8  src 02:2f:2d:ef:29:a2
+ [host-uniq 62 05 00 00] [AC-cookie 24 09 fb 98 23 d4 3b 66 af d4 7a 69 a7 de 85 d7]
+Sent PADT

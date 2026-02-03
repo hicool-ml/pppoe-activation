@@ -1,0 +1,56 @@
+Send PPPOE Discovery V1T1 PADI session 0x0 length 12
+ dst ff:ff:ff:ff:ff:ff  src 02:62:7c:2c:b9:f8
+ [service-name] [host-uniq d3 00 00 00]
+Recv PPPOE Discovery V1T1 PADO session 0x0 length 46
+ dst 02:62:7c:2c:b9:f8  src 4c:6d:58:4c:37:d8
+ [AC-name CDU-BRAS-1] [host-uniq d3 00 00 00] [service-name] [AC-cookie e6 67 60 7b a9 7a 47 6d 4d 02 93 5f e4 53 54 4d]
+Send PPPOE Discovery V1T1 PADR session 0x0 length 32
+ dst 4c:6d:58:4c:37:d8  src 02:62:7c:2c:b9:f8
+ [service-name] [host-uniq d3 00 00 00] [AC-cookie e6 67 60 7b a9 7a 47 6d 4d 02 93 5f e4 53 54 4d]
+Recv PPPOE Discovery V1T1 PADS session 0x87 length 46
+ dst 02:62:7c:2c:b9:f8  src 4c:6d:58:4c:37:d8
+ [service-name] [host-uniq d3 00 00 00] [AC-name CDU-BRAS-1] [AC-cookie e6 67 60 7b a9 7a 47 6d 4d 02 93 5f e4 53 54 4d]
+PPP session is 135
+Connected to 4C:6D:58:4C:37:D8 via interface enp7s0.2005
+using channel 131
+Using interface ppp4
+Connect: ppp4 <--> enp7s0.2005
+sent [LCP ConfReq id=0x1 <mru 1492> <magic 0xb7d263b>]
+rcvd [LCP ConfReq id=0xc0 <mru 1492> <auth pap> <magic 0x18404457>]
+sent [LCP ConfAck id=0xc0 <mru 1492> <auth pap> <magic 0x18404457>]
+rcvd [LCP ConfAck id=0x1 <mru 1492> <magic 0xb7d263b>]
+sent [LCP EchoReq id=0x0 magic=0xb7d263b]
+sent [PAP AuthReq id=0x1 user="18608001027@cdu" password=<hidden>]
+rcvd [LCP EchoRep id=0x0 magic=0x18404457]
+rcvd [PAP AuthAck id=0x1 ""]
+PAP authentication succeeded
+peer from calling number 4C:6D:58:4C:37:D8 authorized
+sent [IPCP ConfReq id=0x1 <addr 0.0.0.0> <ms-dns1 0.0.0.0> <ms-dns2 0.0.0.0>]
+sent [IPV6CP ConfReq id=0x1 <addr fe80::44b5:e901:26d7:2ad6>]
+rcvd [IPCP ConfReq id=0x44 <addr 192.168.168.129>]
+sent [IPCP ConfAck id=0x44 <addr 192.168.168.129>]
+rcvd [IPCP ConfNak id=0x1 <addr 10.16.58.200> <ms-dns1 117.175.132.250> <ms-dns2 117.175.132.251>]
+sent [IPCP ConfReq id=0x2 <addr 10.16.58.200> <ms-dns1 117.175.132.250> <ms-dns2 117.175.132.251>]
+rcvd [LCP ProtRej id=0xc1 80 57 01 01 00 0e 01 0a 44 b5 e9 01 26 d7 2a d6]
+Protocol-Reject for 'IPv6 Control Protocol' (0x8057) received
+rcvd [IPCP ConfAck id=0x2 <addr 10.16.58.200> <ms-dns1 117.175.132.250> <ms-dns2 117.175.132.251>]
+Script /etc/ppp/ip-pre-up started (pid 236)
+Script /etc/ppp/ip-pre-up finished (pid 236), status = 0x0
+local  IP address 10.16.58.200
+remote IP address 192.168.168.129
+primary   DNS address 117.175.132.250
+secondary DNS address 117.175.132.251
+Script /etc/ppp/ip-up started (pid 239)
+Script /etc/ppp/ip-up finished (pid 239), status = 0x0
+Terminating on signal 15
+Connect time 0.1 minutes.
+Sent 0 bytes, received 0 bytes.
+Script /etc/ppp/ip-down started (pid 294)
+sent [LCP TermReq id=0x2 "User request"]
+rcvd [LCP TermAck id=0x2]
+Connection terminated.
+Send PPPOE Discovery V1T1 PADT session 0x87 length 28
+ dst 4c:6d:58:4c:37:d8  src 02:62:7c:2c:b9:f8
+ [host-uniq d3 00 00 00] [AC-cookie e6 67 60 7b a9 7a 47 6d 4d 02 93 5f e4 53 54 4d]
+Sent PADT
+Script /etc/ppp/ip-down finished (pid 294), status = 0x1
