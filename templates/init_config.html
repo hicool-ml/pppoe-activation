@@ -380,23 +380,23 @@
                 </div>
                 
                  <!-- 提交按钮 -->
-                 <div class="button-group">
-                     <button type="button" class="btn-secondary" onclick="location.reload()">
-                         🔄 刷新网卡列表
-                     </button>
-                     <button type="button" class="btn-secondary" onclick="viewConfig()">
-                         👁️ 查看当前配置
-                     </button>
-                     {% if current_config.is_super %}
-                     <button type="submit" class="btn-success">
-                         💾 保存配置并重启
-                     </button>
-                     {% else %}
-                     <button type="button" class="btn-secondary" disabled style="opacity: 0.6; cursor: not-allowed;">
-                         🔒 只有超级管理员才能修改配置
-                     </button>
-                     {% endif %}
-                 </div>
+                  <div class="button-group">
+                      <button type="button" class="btn-secondary" onclick="location.reload()">
+                          🔄 刷新网卡列表
+                      </button>
+                      <button type="button" class="btn-secondary" onclick="viewConfig()">
+                          👁️ 查看当前配置
+                      </button>
+                      {% if current_config.is_super %}
+                      <button type="button" class="btn-success" onclick="saveConfig()">
+                          💾 保存配置
+                      </button>
+                      {% else %}
+                      <button type="button" class="btn-secondary" disabled style="opacity: 0.6; cursor: not-allowed;">
+                          🔒 只有超级管理员才能修改配置
+                      </button>
+                      {% endif %}
+                  </div>
             </form>
         </div>
     </div>
@@ -430,6 +430,246 @@
                 .catch(error => {
                     alert('获取配置失败：' + error);
                 });
+        }
+
+        // 保存配置
+        function saveConfig() {
+            // 获取表单数据
+            const form = document.querySelector('form');
+            const formData = new FormData(form);
+            const data = {};
+            formData.forEach((value, key) => {
+                if (key === 'interfaces') {
+                    if (!data[key]) data[key] = [];
+                    data[key].push(value);
+                } else {
+                    data[key] = value;
+                }
+            });
+
+            // 检查端口是否发生变化
+            const currentAppPort = {{ current_config.app_port }};
+            const currentAdminPort = {{ current_config.admin_port }};
+            const newAppPort = parseInt(data.app_port);
+            const newAdminPort = parseInt(data.admin_port);
+            const portChanged = (newAppPort !== currentAppPort || newAdminPort !== currentAdminPort);
+
+            if (portChanged) {
+                // 端口发生变化，显示确认对话框
+                const message = `检测到端口配置已更改：\n\n` +
+                    `应用端口：${currentAppPort} → ${newAppPort}\n` +
+                    `管理端口：${currentAdminPort} → ${newAdminPort}\n\n` +
+                    `是否立即重启容器使配置生效？\n\n` +
+                    `点击"确定"：保存配置并显示重启命令\n` +
+                    `点击"取消"：仅保存配置，稍后手动重启`;
+
+                if (confirm(message)) {
+                    // 用户选择重启，保存配置
+                    submitForm(data, true);
+                } else {
+                    // 用户选择不重启，仅保存配置
+                    submitForm(data, false);
+                }
+            } else {
+                // 端口未变化，直接保存
+                submitForm(data, false);
+            }
+        }
+
+        // 提交表单
+        function submitForm(data, showRestartCommand) {
+            const form = document.querySelector('form');
+            
+            // 创建FormData对象
+            const formData = new FormData();
+            Object.keys(data).forEach(key => {
+                if (Array.isArray(data[key])) {
+                    data[key].forEach(value => {
+                        formData.append(key, value);
+                    });
+                } else {
+                    formData.append(key, data[key]);
+                }
+            });
+
+            // 先保存配置
+            fetch('/save', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('保存失败');
+                }
+                return response.text();
+            })
+            .then(html => {
+                // 如果需要重启容器
+                if (showRestartCommand) {
+                    // 端口已改变，显示倒计时对话框
+                    showManualRestartDialog();
+                } else {
+                    // 端口未变化，显示成功消息并刷新页面
+                    showSuccessDialog();
+                }
+            })
+            .catch(error => {
+                console.error('保存配置失败:', error);
+                alert('❌ 保存配置失败：' + error.message);
+            });
+        }
+
+        // 显示成功对话框
+        function showSuccessDialog() {
+            const successDiv = document.createElement('div');
+            successDiv.style.cssText = 'position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; justify-content: center; align-items: center; z-index: 9999;';
+            successDiv.innerHTML = `
+                <div style="background: white; padding: 30px; border-radius: 15px; max-width: 400px; text-align: center;">
+                    <div style="font-size: 60px; margin-bottom: 20px;">✅</div>
+                    <h2 style="color: #10b981; margin-bottom: 15px;">配置已保存</h2>
+                    <p style="color: #495057; margin-bottom: 25px;">配置已成功保存并生效！</p>
+                    <button onclick="location.reload()" 
+                            style="background: #10b981; color: white; border: none; padding: 12px 40px; border-radius: 8px; cursor: pointer; font-size: 16px; font-weight: 600;">
+                        确定
+                    </button>
+                </div>
+            `;
+            successDiv.className = 'success-dialog';
+            document.body.appendChild(successDiv);
+            
+            // 点击背景关闭（不阻止刷新）
+            successDiv.addEventListener('click', function(e) {
+                if (e.target === successDiv) {
+                    location.reload();
+                }
+            });
+        }
+
+        // 显示重启倒计时对话框
+        function showManualRestartDialog() {
+            let countdown = 10;
+            const restartDiv = document.createElement('div');
+            restartDiv.style.cssText = 'position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); display: flex; justify-content: center; align-items: center; z-index: 9999;';
+            restartDiv.innerHTML = `
+                <div style="background: white; padding: 30px; border-radius: 15px; max-width: 500px; text-align: center;">
+                    <h2 style="color: #667eea; margin-bottom: 20px;">✅ 配置已保存</h2>
+                    <p style="margin-bottom: 20px; color: #495057;">端口配置已保存，容器正在重启中...</p>
+                    
+                    <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                        <div id="countdown" style="font-size: 48px; font-weight: bold; color: #667eea; margin-bottom: 10px;">10</div>
+                        <div style="color: #6c757d; font-size: 14px;">秒后自动刷新页面</div>
+                    </div>
+                    
+                    <p style="color: #6c757d; font-size: 14px; margin-bottom: 20px;">
+                        ⚠️ 注意：重启后访问地址可能会变化，请使用新端口访问
+                    </p>
+                    
+                    <button onclick="location.reload()" 
+                            style="background: #667eea; color: white; border: none; padding: 12px 30px; border-radius: 8px; cursor: pointer; font-size: 15px; font-weight: 600;">
+                        立即刷新
+                    </button>
+                </div>
+            `;
+            restartDiv.className = 'restart-dialog';
+            document.body.appendChild(restartDiv);
+            
+            // 倒计时
+            const countdownInterval = setInterval(() => {
+                countdown--;
+                const countdownEl = document.getElementById('countdown');
+                if (countdownEl) {
+                    countdownEl.textContent = countdown;
+                }
+                
+                if (countdown <= 0) {
+                    clearInterval(countdownInterval);
+                    location.reload();
+                }
+            }, 1000);
+            
+            // 点击背景关闭（不阻止倒计时）
+            restartDiv.addEventListener('click', function(e) {
+                if (e.target === restartDiv) {
+                    // 不关闭对话框，让倒计时继续
+                }
+            });
+        }
+
+        // 显示重启进度（保留用于其他场景）
+        function showRestartProgress() {
+            const restartDiv = document.createElement('div');
+            restartDiv.style.cssText = 'position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); display: flex; justify-content: center; align-items: center; z-index: 9999;';
+            restartDiv.innerHTML = `
+                <div style="background: white; padding: 30px; border-radius: 15px; max-width: 500px; text-align: center;">
+                    <h2 style="color: #667eea; margin-bottom: 20px;">🔄 正在重启容器</h2>
+                    <p style="margin-bottom: 20px;">配置已保存，正在重启容器使端口配置生效...</p>
+                    <div id="restartStatus" style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin: 15px 0;">
+                        正在执行重启命令...
+                    </div>
+                    <div class="loading-spinner" style="border: 4px solid #f3f3f3; border-top: 4px solid #667eea; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin: 20px auto;"></div>
+                    <style>
+                        @keyframes spin {
+                            0% { transform: rotate(0deg); }
+                            100% { transform: rotate(360deg); }
+                        }
+                    </style>
+                </div>
+            `;
+            document.body.appendChild(restartDiv);
+            
+            // 调用重启API
+            restartContainer();
+            
+            // 点击背景关闭
+            restartDiv.addEventListener('click', function(e) {
+                if (e.target === restartDiv) {
+                    document.body.removeChild(restartDiv);
+                }
+            });
+        }
+
+        // 重启容器（保留用于其他场景）
+        function restartContainer() {
+            fetch('/api/restart-container', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                const statusDiv = document.getElementById('restartStatus');
+                if (data.success) {
+                    statusDiv.innerHTML = '✅ 容器重启成功！<br>页面将在5秒后自动刷新...';
+                    setTimeout(() => {
+                        location.reload();
+                    }, 5000);
+                } else {
+                    statusDiv.innerHTML = '❌ ' + data.message;
+                }
+            })
+            .catch(error => {
+                const statusDiv = document.getElementById('restartStatus');
+                if (statusDiv) {
+                    statusDiv.innerHTML = '❌ 重启失败：' + error;
+                }
+            });
+        }
+
+        // 复制到剪贴板
+        function copyToClipboard(text) {
+            navigator.clipboard.writeText(text).then(() => {
+                alert('命令已复制到剪贴板！');
+            }).catch(err => {
+                // 降级方案
+                const textArea = document.createElement('textarea');
+                textArea.value = text;
+                document.body.appendChild(textArea);
+                textArea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textArea);
+                alert('命令已复制到剪贴板！');
+            });
         }
 
         // 初始化选中状态

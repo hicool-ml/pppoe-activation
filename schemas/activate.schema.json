@@ -1,0 +1,59 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "PPPoE Activate Request",
+  "type": "object",
+  "required": ["name", "role", "isp", "username", "password", "lang"],
+  "properties": {
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 32
+    },
+    "role": {
+      "type": "string",
+      "enum": ["学生", "教职工", "外包"]
+    },
+    "isp": {
+      "type": "string",
+      "enum": ["cdu", "cmccgx", "96301", "10010", "direct"]
+    },
+    "cmcc_type": {
+      "type": "string",
+      "enum": ["normal", "scxy"]
+    },
+    "username": {
+      "type": "string",
+      "minLength": 4,
+      "maxLength": 64
+    },
+    "password": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "lang": {
+      "type": "string",
+      "pattern": "^[a-z]{2}$"
+    },
+    "client": {
+      "type": "object",
+      "properties": {
+        "ua": { "type": "string", "maxLength": 256 },
+        "timezone": { "type": "string", "maxLength": 64 }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": { "isp": { "const": "cmccgx" } },
+        "required": ["isp"]
+      },
+      "then": {
+        "required": ["cmcc_type"]
+      }
+    }
+  ]
+}
