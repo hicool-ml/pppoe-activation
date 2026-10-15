@@ -116,7 +116,7 @@
         }
         .charts-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(600px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
             gap: 20px;
             margin-bottom: 30px;
         }
@@ -136,6 +136,27 @@
             position: relative;
             height: 350px;
         }
+        .dashboard-filters {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: end;
+            gap: 12px;
+            margin-bottom: 24px;
+            padding: 16px;
+            background: #f8f9fa;
+            border-radius: 10px;
+        }
+        .dashboard-filters label { display: grid; gap: 6px; color: #555; font-size: 13px; }
+        .dashboard-filters .check-option { display: flex; align-items: center; gap: 8px; min-height: 38px; }
+        .dashboard-filters select, .dashboard-filters input, .dashboard-filters button {
+            min-height: 38px;
+            padding: 7px 10px;
+            border: 1px solid #ced4da;
+            border-radius: 6px;
+            background: #fff;
+            font: inherit;
+        }
+        .dashboard-filters button { background: #667eea; border-color: #667eea; color: white; cursor: pointer; }
         .nav-links {
             display: flex;
             gap: 15px;
@@ -229,10 +250,25 @@
                 </div>
             </div>
 
+            <form class="dashboard-filters" method="get" action="/dashboard">
+                <label>开始日期<input type="date" name="start" value="{{ start_date }}" id="startDate"></label>
+                <label>结束日期<input type="date" name="end" value="{{ end_date }}" id="endDate"></label>
+                <label>统计粒度
+                    <select name="group" id="groupSelect">
+                        <option value="day" {% if granularity == 'day' %}selected{% endif %}>按日</option>
+                        <option value="week" {% if granularity == 'week' %}selected{% endif %}>按周</option>
+                        <option value="month" {% if granularity == 'month' %}selected{% endif %}>按月</option>
+                    </select>
+                </label>
+                <label class="check-option" title="过滤激活失败记录对激活趋势图和 ISP 分布的影响；统计卡片仍显示全部成功和失败次数"><input type="checkbox" name="exclude_failures" value="1" {% if exclude_failures %}checked{% endif %}> 排除失败记录</label>
+                <button type="submit">应用筛选</button>
+            </form>
+            <div class="text-muted" style="margin: -12px 0 24px 4px;">起止日期都留空表示全部时间；填写日期时请同时填写开始和结束日期。</div>
+
             <!-- 图表 -->
             <div class="charts-grid">
                 <div class="chart-card">
-                    <h3>📅 每日激活统计</h3>
+                    <h3>📅 {{ {'day': '每日', 'week': '每周', 'month': '每月'}[granularity] }}激活统计</h3>
                     <div class="chart-container">
                         <canvas id="barChart"></canvas>
                     </div>
@@ -248,6 +284,15 @@
     </div>
 
     <script>
+        document.querySelector('.dashboard-filters').addEventListener('submit', (event) => {
+            const start = document.getElementById('startDate').value;
+            const end = document.getElementById('endDate').value;
+            if (Boolean(start) !== Boolean(end)) {
+                event.preventDefault();
+                alert('请同时选择开始日期和结束日期，或将两项都留空。');
+            }
+        });
+
         // 从Flask模板获取数据
         const countByDay = JSON.parse('{{ count_by_day | tojson | safe }}');
         const ispCount = JSON.parse('{{ isp_count | tojson | safe }}');
@@ -273,7 +318,7 @@
         };
 
         // 计算统计数据
-        const totalCount = Object.values(countByDay).reduce((a, b) => a + b, 0);
+        const totalCount = parseInt('{{ total_count }}') || 0;
         const successRate = totalCount > 0 ? ((successCount / totalCount) * 100).toFixed(1) : 0;
 
         // 更新统计卡片

@@ -1,21 +1,24 @@
 # PPPOE 激活系统配置文件
-# 自动生成于 Tue Jan 20 07:31:12 CST 2026
+import os
 
-BASE_DIR = '/opt/pppoe-activation'
+# 自动生成于 Thu Sep 17 11:08:53 CST 2026
+
+BASE_DIR = os.environ.get('PPPOE_BASE_DIR', '/opt/pppoe-activation')
 
 # SQLite 数据库绝对路径（固定）
-DATABASE_PATH = '/opt/pppoe-activation/instance/database.db'
+DATABASE_PATH = os.environ.get(
+    'PPPOE_DATABASE_PATH',
+    os.path.join(BASE_DIR, 'instance', 'database.db')
+)
 
 # 网卡配置（用户配置）
-NETWORK_INTERFACES = ["enp3s0", "enp4s0", "enp5s0", "enp6s0"]
-
-# 默认网络模式（初始化用）
-DEFAULT_NET_MODE = "physical"   # physical | vlan
-DEFAULT_VLAN_ID = None          # 仅 vlan 模式使用
+# 注意：NETWORK_INTERFACES 仅用于初始化默认值展示，不参与运行期逻辑
+# 运行期网络配置请参考数据库中的 NetworkConfig 表
+NETWORK_INTERFACES = ["ens64.2001", "ens64.2002", "ens64.2003", "ens64.2004", "ens64.2005"]
 
 # 日志目录
-PPP_LOG_DIR = f'{BASE_DIR}/logs'
+PPP_LOG_DIR = os.environ.get('PPPOE_LOG_DIR', os.path.join(BASE_DIR, 'logs'))
 
 # 服务端口配置
-APP_PORT = 100
-ADMIN_PORT = 8081
+APP_PORT = int(os.environ.get('APP_PORT', '80'))
+ADMIN_PORT = int(os.environ.get('ADMIN_PORT', '8081'))

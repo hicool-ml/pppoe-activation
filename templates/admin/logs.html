@@ -142,6 +142,29 @@
         .form-group {
             margin-bottom: 20px;
         }
+        .export-filters {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+            gap: 16px;
+            align-items: end;
+            margin-bottom: 12px;
+        }
+        .export-filters input[type="datetime-local"] {
+            box-sizing: border-box;
+        }
+        .export-filters .btn {
+            width: auto;
+            min-height: 42px;
+            white-space: nowrap;
+        }
+        @media (max-width: 700px) {
+            .export-filters {
+                grid-template-columns: 1fr;
+            }
+            .export-filters .btn {
+                width: 100%;
+            }
+        }
         label {
             display: block;
             margin-bottom: 8px;
@@ -198,19 +221,24 @@
         }
         .pagination {
             display: flex;
+            flex-wrap: wrap;
             justify-content: center;
-            gap: 10px;
+            align-items: center;
+            gap: 8px;
             margin-top: 30px;
+            max-width: 100%;
+            box-sizing: border-box;
         }
-        .pagination a {
+        .pagination a, .pagination span.page-link, .pagination span.active {
             background: white;
-            border-radius: 10px;
-            padding: 10px 20px;
+            border-radius: 8px;
+            padding: 8px 12px;
             text-decoration: none;
             color: #333;
             font-weight: 500;
             box-shadow: 0 2px 8px rgba(0,0,0,0.05);
             transition: all 0.3s ease;
+            box-sizing: border-box;
         }
         .pagination a:hover {
             transform: translateY(-2px);
@@ -227,6 +255,10 @@
         .pagination .active {
             background: #667eea;
             color: white;
+        }
+        .pagination .ellipsis {
+            padding: 0 3px;
+            color: #6c757d;
         }
     </style>
 </head>
@@ -248,16 +280,18 @@
             <!-- 导出卡片 -->
             <div class="card">
                 <h3>📥 导出日志</h3>
-                <div class="mb-3">
+                <div class="export-filters">
+                  <div>
                     <label for="startDate">开始时间</label>
                     <input type="datetime-local" class="w-100" id="startDate">
-                </div>
-                <div class="mb-3">
+                  </div>
+                  <div>
                     <label for="endDate">结束时间</label>
                     <input type="datetime-local" class="w-100" id="endDate">
-                </div>
-                <div class="mb-3">
-                    <button type="button" class="btn btn-primary w-100" onclick="exportLogs()">导出CSV</button>
+                  </div>
+                  <div>
+                    <button type="button" class="btn btn-primary" onclick="exportLogs()">导出CSV</button>
+                  </div>
                 </div>
                 <div class="text-muted">如果不选择时间范围，将导出所有日志</div>
             </div>
@@ -308,27 +342,33 @@
             
             <!-- 分页控件 -->
             {% if logs.total > 0 %}
-            <div class="pagination">
+            <nav class="pagination" aria-label="日志分页">
                 {% if logs.has_prev %}
                     <a class="page-link" href="?page={{ logs.prev_num }}">上一页</a>
                 {% else %}
                     <span class="page-link disabled">上一页</span>
                 {% endif %}
 
-                {% for p in range(1, logs.pages + 1) %}
+                {% if logs.show_first %}
+                    <a class="page-link" href="?page=1">1</a><span class="ellipsis">…</span>
+                {% endif %}
+                {% for p in logs.page_numbers %}
                     {% if p == logs.page %}
                         <span class="active">{{ p }}</span>
                     {% else %}
                         <a class="page-link" href="?page={{ p }}">{{ p }}</a>
                     {% endif %}
                 {% endfor %}
+                {% if logs.show_last %}
+                    <span class="ellipsis">…</span><a class="page-link" href="?page={{ logs.pages }}">{{ logs.pages }}</a>
+                {% endif %}
 
                 {% if logs.has_next %}
                     <a class="page-link" href="?page={{ logs.next_num }}">下一页</a>
                 {% else %}
                     <span class="page-link disabled">下一页</span>
                 {% endif %}
-            </div>
+            </nav>
             <div class="text-center text-muted mt-3">
                 第 {{ logs.page }} 页，共 {{ logs.pages }} 页，总计 {{ logs.total }} 条记录
             </div>

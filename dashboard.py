@@ -2,11 +2,11 @@
 from flask import Flask, jsonify, render_template, request, make_response, redirect, url_for, session
 from models import SessionLocal, ActivationLog, NetworkConfig, AdminUser, Config, init_db
 from sync import sync_logs
-from config import ADMIN_PORT
+from config import ADMIN_PORT, DATABASE_PATH
 import logging
 import csv
 from io import StringIO
-from datetime import datetime
+from datetime import datetime, date, timedelta
 import hashlib
 from flask_sqlalchemy import SQLAlchemy
 import subprocess
@@ -20,7 +20,7 @@ app = Flask(__name__, static_folder='web/static', template_folder='templates')
 app.secret_key = 'your-super-secret-key-change-it-please'  # 请修改！
 
 # ========== 数据库配置 ==========
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:////opt/pppoe-activation/instance/database.db'
+app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{DATABASE_PATH.replace(os.sep, '/')}"
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
@@ -130,6 +130,8 @@ def admin_logs():
         per_page = 50
         query = db.query(ActivationLog).order_by(ActivationLog.id.desc())
         total = query.count()
+        pages = max(1, (total + per_page - 1) // per_page)
+        page = min(max(page, 1), pages)
         offset = (page - 1) * per_page
         logs = query.offset(offset).limit(per_page).all()
 
@@ -145,6 +147,11 @@ def admin_logs():
                 self.has_next = page < self.pages
                 self.prev_num = page - 1 if self.has_prev else None
                 self.next_num = page + 1 if self.has_next else None
+                first = max(1, page - 3)
+                last = min(self.pages, page + 3)
+                self.page_numbers = range(first, last + 1)
+                self.show_first = first > 1
+                self.show_last = last < self.pages
 
         pagination = Pagination(logs, page, per_page, total)
         
@@ -615,27 +622,68 @@ def dashboard():
     if 'admin' not in session:
         return redirect('/login')
 
+    if os.environ.get('PPPOE_LOCAL_TEST') != '1':
+        try:
+            sync_logs(latest_only=True)
+        except Exception as e:
+            logger.error(f"自动同步失败: {e}")
+
+    # 日期范围和图表汇总粒度互相独立；失败过滤仅用于每日激活趋势图。
+    start_date = None
+    end_date = None
     try:
-        sync_logs(latest_only=True)
-    except Exception as e:
-        logger.error(f"自动同步失败: {e}")
+        start_date = date.fromisoformat(request.args.get('start', ''))
+    except ValueError:
+        start_date = None
+    try:
+        end_date = date.fromisoformat(request.args.get('end', ''))
+    except ValueError:
+        end_date = None
+    if start_date and end_date and start_date > end_date:
+        start_date, end_date = end_date, start_date
+
+    granularity = request.args.get('group', 'day')
+    if granularity not in {'day', 'week', 'month'}:
+        granularity = 'day'
+    exclude_failures = request.args.get('exclude_failures') == '1'
 
     # 获取统计数据
     db = SessionLocal()
     try:
-        # 按日期统计
         logs = db.query(ActivationLog).all()
+        filtered_logs = []
+        chart_logs = []
         count_by_day = {}
         for log in logs:
-            if log.timestamp:
-                date = log.timestamp.split()[0] if ' ' in log.timestamp else log.timestamp
-                if date not in count_by_day:
-                    count_by_day[date] = 0
-                count_by_day[date] += 1
+            if not log.timestamp:
+                continue
+            try:
+                log_date = datetime.fromisoformat(log.timestamp.strip().replace('Z', '+00:00')).date()
+            except ValueError:
+                try:
+                    log_date = date.fromisoformat(log.timestamp.strip()[:10])
+                except ValueError:
+                    continue
+            if start_date and log_date < start_date:
+                continue
+            if end_date and log_date > end_date:
+                continue
+            filtered_logs.append(log)
+            if exclude_failures and not log.success:
+                continue
+            chart_logs.append(log)
+            if granularity == 'week':
+                bucket = (log_date - timedelta(days=log_date.weekday())).isoformat()
+            elif granularity == 'month':
+                bucket = log_date.strftime('%Y-%m')
+            else:
+                bucket = log_date.isoformat()
+            count_by_day[bucket] = count_by_day.get(bucket, 0) + 1
+        count_by_day = dict(sorted(count_by_day.items()))
 
         # 按ISP统计
         isp_count = {}
-        for log in logs:
+        for log in chart_logs:
             isp = log.isp or 'Unknown'
             if isp not in isp_count:
                 isp_count[isp] = 0
@@ -644,20 +692,19 @@ def dashboard():
         # 统计成功和失败次数
         success_count = 0
         failure_count = 0
-        for log in logs:
+        for log in filtered_logs:
             if log.success:
                 success_count += 1
             else:
                 failure_count += 1
 
-        period = "最近记录"
     finally:
         db.close()
 
     # 获取当前用户角色
     current_role = session.get('admin_role')
     
-    return render_template('dashboard.html', period=period, count_by_day=count_by_day, isp_count=isp_count, success_count=success_count, failure_count=failure_count, current_role=current_role)
+    return render_template('dashboard.html', start_date=start_date.isoformat() if start_date else '', end_date=end_date.isoformat() if end_date else '', granularity=granularity, exclude_failures=exclude_failures, total_count=len(filtered_logs), count_by_day=count_by_day, isp_count=isp_count, success_count=success_count, failure_count=failure_count, current_role=current_role)
 
 
 @app.route('/admin_list')
@@ -922,4 +969,5 @@ if __name__ == '__main__':
         logger.info("Database initialized successfully.")
     except Exception as e:
         logger.error(f"Failed to initialize database: {e}")
-    app.run(host='0.0.0.0', port=ADMIN_PORT, debug=False)
+    local_test = os.environ.get('PPPOE_LOCAL_TEST') == '1'
+    app.run(host='127.0.0.1' if local_test else '0.0.0.0', port=ADMIN_PORT, debug=False)

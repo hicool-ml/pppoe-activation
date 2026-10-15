@@ -1,2 +1,28 @@
-pppoe-activation-container.tar
-pppoe-activation-image.tar
+# Secrets and local environment
+.env
+.env.*
+!.env.example
+
+# Local and production databases
+*.db
+*.sqlite
+*.sqlite3
+
+# Python environment and generated files
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+
+# Runtime state and logs
+logs/
+web/logs/
+locks/
+temp/
+*.lock
+activation_log.jsonl
+import_offset.txt
+.initialized
+
+# Local-only dependency list
+requirements.local.txt
