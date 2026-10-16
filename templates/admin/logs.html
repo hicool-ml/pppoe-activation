@@ -168,6 +168,16 @@
             background: white;
             font: inherit;
         }
+        .log-filters input[type="search"] {
+            box-sizing: border-box;
+            width: 190px;
+            min-height: 38px;
+            padding: 6px 8px;
+            border: 1px solid #ced4da;
+            border-radius: 6px;
+            background: white;
+            font: inherit;
+        }
         .log-filters button {
             flex: 0 0 auto;
             border: 0;
@@ -293,6 +303,7 @@
                 <input type="hidden" name="page" value="1">
                 <label>开始日期 <input type="date" name="start" id="startDate" value="{{ start_date }}"></label>
                 <label>结束日期 <input type="date" name="end" id="endDate" value="{{ end_date }}"></label>
+                <label>姓名/账号 <input type="search" name="q" id="searchQuery" value="{{ search_query }}" placeholder="输入姓名或账号"></label>
                 <label title="列表和 CSV 均只保留成功激活记录">
                     <input type="checkbox" name="exclude_failures" id="excludeFailures" value="1" {% if exclude_failures %}checked{% endif %}>
                     排除失败记录
@@ -353,27 +364,27 @@
             {% if logs.total > 0 %}
             <nav class="pagination" aria-label="日志分页">
                 {% if logs.has_prev %}
-                    <a class="page-link" href="?page={{ logs.prev_num }}{% if start_date %}&start={{ start_date|urlencode }}{% endif %}{% if end_date %}&end={{ end_date|urlencode }}{% endif %}{% if exclude_failures %}&exclude_failures=1{% endif %}{% if exclude_duplicates %}&exclude_duplicates=1{% endif %}">上一页</a>
+                    <a class="page-link" href="?page={{ logs.prev_num }}{% if start_date %}&start={{ start_date|urlencode }}{% endif %}{% if end_date %}&end={{ end_date|urlencode }}{% endif %}{% if search_query %}&q={{ search_query|urlencode }}{% endif %}{% if exclude_failures %}&exclude_failures=1{% endif %}{% if exclude_duplicates %}&exclude_duplicates=1{% endif %}">上一页</a>
                 {% else %}
                     <span class="page-link disabled">上一页</span>
                 {% endif %}
 
                 {% if logs.show_first %}
-                    <a class="page-link" href="?page=1{% if start_date %}&start={{ start_date|urlencode }}{% endif %}{% if end_date %}&end={{ end_date|urlencode }}{% endif %}{% if exclude_failures %}&exclude_failures=1{% endif %}{% if exclude_duplicates %}&exclude_duplicates=1{% endif %}">1</a><span class="ellipsis">…</span>
+                    <a class="page-link" href="?page=1{% if start_date %}&start={{ start_date|urlencode }}{% endif %}{% if end_date %}&end={{ end_date|urlencode }}{% endif %}{% if search_query %}&q={{ search_query|urlencode }}{% endif %}{% if exclude_failures %}&exclude_failures=1{% endif %}{% if exclude_duplicates %}&exclude_duplicates=1{% endif %}">1</a><span class="ellipsis">…</span>
                 {% endif %}
                 {% for p in logs.page_numbers %}
                     {% if p == logs.page %}
                         <span class="active">{{ p }}</span>
                     {% else %}
-                        <a class="page-link" href="?page={{ p }}{% if start_date %}&start={{ start_date|urlencode }}{% endif %}{% if end_date %}&end={{ end_date|urlencode }}{% endif %}{% if exclude_failures %}&exclude_failures=1{% endif %}{% if exclude_duplicates %}&exclude_duplicates=1{% endif %}">{{ p }}</a>
+                        <a class="page-link" href="?page={{ p }}{% if start_date %}&start={{ start_date|urlencode }}{% endif %}{% if end_date %}&end={{ end_date|urlencode }}{% endif %}{% if search_query %}&q={{ search_query|urlencode }}{% endif %}{% if exclude_failures %}&exclude_failures=1{% endif %}{% if exclude_duplicates %}&exclude_duplicates=1{% endif %}">{{ p }}</a>
                     {% endif %}
                 {% endfor %}
                 {% if logs.show_last %}
-                    <span class="ellipsis">…</span><a class="page-link" href="?page={{ logs.pages }}{% if start_date %}&start={{ start_date|urlencode }}{% endif %}{% if end_date %}&end={{ end_date|urlencode }}{% endif %}{% if exclude_failures %}&exclude_failures=1{% endif %}{% if exclude_duplicates %}&exclude_duplicates=1{% endif %}">{{ logs.pages }}</a>
+                    <span class="ellipsis">…</span><a class="page-link" href="?page={{ logs.pages }}{% if start_date %}&start={{ start_date|urlencode }}{% endif %}{% if end_date %}&end={{ end_date|urlencode }}{% endif %}{% if search_query %}&q={{ search_query|urlencode }}{% endif %}{% if exclude_failures %}&exclude_failures=1{% endif %}{% if exclude_duplicates %}&exclude_duplicates=1{% endif %}">{{ logs.pages }}</a>
                 {% endif %}
 
                 {% if logs.has_next %}
-                    <a class="page-link" href="?page={{ logs.next_num }}{% if start_date %}&start={{ start_date|urlencode }}{% endif %}{% if end_date %}&end={{ end_date|urlencode }}{% endif %}{% if exclude_failures %}&exclude_failures=1{% endif %}{% if exclude_duplicates %}&exclude_duplicates=1{% endif %}">下一页</a>
+                    <a class="page-link" href="?page={{ logs.next_num }}{% if start_date %}&start={{ start_date|urlencode }}{% endif %}{% if end_date %}&end={{ end_date|urlencode }}{% endif %}{% if search_query %}&q={{ search_query|urlencode }}{% endif %}{% if exclude_failures %}&exclude_failures=1{% endif %}{% if exclude_duplicates %}&exclude_duplicates=1{% endif %}">下一页</a>
                 {% else %}
                     <span class="page-link disabled">下一页</span>
                 {% endif %}
@@ -391,6 +402,7 @@
             const endDate = document.getElementById('endDate').value;
             const excludeFailures = document.getElementById('excludeFailures').checked;
             const excludeDuplicates = document.getElementById('excludeDuplicates').checked;
+            const searchQuery = document.getElementById('searchQuery').value.trim();
 
             if (Boolean(startDate) !== Boolean(endDate)) {
                 alert('请同时选择开始和结束日期，或将两项都留空。');
@@ -405,6 +417,9 @@
             }
             if (endDate) {
                 params.append('end', endDate);
+            }
+            if (searchQuery) {
+                params.append('q', searchQuery);
             }
             if (excludeFailures || excludeDuplicates) {
                 params.append('exclude_failures', '1');

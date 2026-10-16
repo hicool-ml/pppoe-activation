@@ -73,7 +73,7 @@
         }
         .stats-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            grid-template-columns: repeat(5, minmax(0, 1fr));
             gap: 20px;
             margin-bottom: 30px;
         }
@@ -232,9 +232,8 @@
         </div>
 
         <div class="form-container">
-            <!-- 日期范围内的原始统计 -->
+            <!-- 当前日期范围内的总体统计 -->
             <section class="stats-section">
-            <h3 class="stats-row-heading">所选日期范围</h3>
             <div class="stats-grid">
                 <div class="stat-card primary">
                     <div class="icon">📈</div>
@@ -246,6 +245,11 @@
                     <div class="label">成功次数</div>
                     <div class="value" id="dateSuccessCount">0</div>
                 </div>
+                <div class="stat-card success">
+                    <div class="icon">👤</div>
+                    <div class="label">成功激活账号</div>
+                    <div class="value" id="dateUniqueAccounts">0</div>
+                </div>
                 <div class="stat-card warning">
                     <div class="icon">❌</div>
                     <div class="label">失败次数</div>
@@ -253,45 +257,8 @@
                 </div>
                 <div class="stat-card info">
                     <div class="icon">📊</div>
-                    <div class="label">成功率</div>
-                    <div class="value" id="dateSuccessRate">0%</div>
-                </div>
-                <div class="stat-card success">
-                    <div class="icon">👤</div>
-                    <div class="label">成功激活账号</div>
-                    <div class="value" id="dateUniqueAccounts">0</div>
-                </div>
-            </div>
-            </section>
-
-            <!-- 应用全部筛选后的统计 -->
-            <section class="stats-section">
-            <h3 class="stats-row-heading">应用筛选后</h3>
-            <div class="stats-grid">
-                <div class="stat-card primary">
-                    <div class="icon">📈</div>
-                    <div class="label">总激活次数</div>
-                    <div class="value" id="filteredTotalCount">0</div>
-                </div>
-                <div class="stat-card success">
-                    <div class="icon">✅</div>
-                    <div class="label">成功次数</div>
-                    <div class="value" id="filteredSuccessCount">0</div>
-                </div>
-                <div class="stat-card warning">
-                    <div class="icon">❌</div>
-                    <div class="label">失败次数</div>
-                    <div class="value" id="filteredFailureCount">0</div>
-                </div>
-                <div class="stat-card info">
-                    <div class="icon">📊</div>
-                    <div class="label">成功率</div>
-                    <div class="value" id="filteredSuccessRate">0%</div>
-                </div>
-                <div class="stat-card success">
-                    <div class="icon">👤</div>
-                    <div class="label">成功激活账号</div>
-                    <div class="value" id="filteredUniqueAccounts">0</div>
+                    <div class="label">失败率</div>
+                    <div class="value" id="dateFailureRate">0%</div>
                 </div>
             </div>
             </section>
@@ -306,7 +273,7 @@
                         <option value="month" {% if granularity == 'month' %}selected{% endif %}>按月</option>
                     </select>
                 </label>
-                <label class="check-option" title="趋势图和 ISP 分布仅统计成功记录；统计卡片仍显示原始成功和失败次数"><input type="checkbox" name="exclude_failures" value="1" id="excludeFailures" {% if exclude_failures %}checked{% endif %}> 排除失败记录</label>
+                <label class="check-option" title="趋势图和 ISP 分布仅统计成功记录；顶部汇总仍保留成功和失败次数"><input type="checkbox" name="exclude_failures" value="1" id="excludeFailures" {% if exclude_failures %}checked{% endif %}> 排除失败记录</label>
                 <label class="check-option" title="仅统计成功记录，并按账号保留所选范围内最早的一条"><input type="checkbox" name="exclude_duplicates" value="1" id="excludeDuplicates" {% if exclude_duplicates %}checked{% endif %}> 排除重复记录</label>
                 <button type="submit">应用筛选</button>
             </form>
@@ -355,9 +322,6 @@
         const dateTotalCount = parseInt('{{ date_total_count }}') || 0;
         const dateSuccessCount = parseInt('{{ date_success_count }}') || 0;
         const dateFailureCount = parseInt('{{ date_failure_count }}') || 0;
-        const filteredTotalCount = parseInt('{{ filtered_total_count }}') || 0;
-        const filteredSuccessCount = parseInt('{{ filtered_success_count }}') || 0;
-        const filteredFailureCount = parseInt('{{ filtered_failure_count }}') || 0;
 
         // ISP显示映射
         const ISP_DISPLAY = {
@@ -381,13 +345,8 @@
         document.getElementById('dateTotalCount').textContent = dateTotalCount;
         document.getElementById('dateSuccessCount').textContent = dateSuccessCount;
         document.getElementById('dateFailureCount').textContent = dateFailureCount;
-        document.getElementById('dateSuccessRate').textContent = '{{ date_success_rate }}';
+        document.getElementById('dateFailureRate').textContent = '{{ failure_rate }}';
         document.getElementById('dateUniqueAccounts').textContent = '{{ date_unique_success_accounts }}';
-        document.getElementById('filteredTotalCount').textContent = filteredTotalCount;
-        document.getElementById('filteredSuccessCount').textContent = filteredSuccessCount;
-        document.getElementById('filteredFailureCount').textContent = filteredFailureCount;
-        document.getElementById('filteredSuccessRate').textContent = '{{ filtered_success_rate }}';
-        document.getElementById('filteredUniqueAccounts').textContent = '{{ filtered_unique_success_accounts }}';
 
         // 柱状图
         const barCtx = document.getElementById('barChart').getContext('2d');

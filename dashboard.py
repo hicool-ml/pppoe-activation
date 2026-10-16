@@ -148,6 +148,18 @@ def filter_activation_logs_by_date(logs, start_date=None, end_date=None):
     return filtered_logs
 
 
+def filter_activation_logs_by_search(logs, search_query=''):
+    """Match a case-insensitive substring in either account name or username."""
+    needle = (search_query or '').strip().casefold()
+    if not needle:
+        return logs
+    return [
+        log for log in logs
+        if needle in (log.name or '').casefold()
+        or needle in (log.username or '').casefold()
+    ]
+
+
 def count_unique_success_accounts(logs):
     return len({
         log.username.strip()
@@ -215,6 +227,7 @@ def admin_logs():
         )
         exclude_failures = request.args.get('exclude_failures') == '1'
         exclude_duplicates = request.args.get('exclude_duplicates') == '1'
+        search_query = request.args.get('q', '').strip()
         query = db.query(ActivationLog)
         if exclude_failures or exclude_duplicates:
             query = query.filter(ActivationLog.success.is_(True))
@@ -224,6 +237,7 @@ def admin_logs():
             start_date=start_date,
             end_date=end_date,
         )
+        all_logs = filter_activation_logs_by_search(all_logs, search_query)
         if exclude_duplicates:
             filtered_logs = filter_activation_logs(
                 all_logs,
@@ -275,6 +289,7 @@ def admin_logs():
             exclude_duplicates=exclude_duplicates,
             start_date=start_date.isoformat() if start_date else '',
             end_date=end_date.isoformat() if end_date else '',
+            search_query=search_query,
         )
     finally:
         db.close()
@@ -794,14 +809,10 @@ def dashboard():
         date_failure_count = date_total_count - date_success_count
         date_unique_success_accounts = count_unique_success_accounts(date_filtered_logs)
 
-        filtered_total_count = len(summary_logs)
-        filtered_success_count = sum(1 for log in summary_logs if log.success)
-        filtered_failure_count = filtered_total_count - filtered_success_count
-        filtered_success_rate = (
-            f'{filtered_success_count / filtered_total_count * 100:.1f}%'
-            if filtered_total_count else '0%'
+        failure_rate = (
+            f'{date_failure_count / date_total_count * 100:.1f}%'
+            if date_total_count else '0%'
         )
-        filtered_unique_success_accounts = count_unique_success_accounts(summary_logs)
 
     finally:
         db.close()
@@ -821,11 +832,7 @@ def dashboard():
         date_failure_count=date_failure_count,
         date_success_rate=(f'{date_success_count / date_total_count * 100:.1f}%' if date_total_count else '0%'),
         date_unique_success_accounts=date_unique_success_accounts,
-        filtered_total_count=filtered_total_count,
-        filtered_success_count=filtered_success_count,
-        filtered_failure_count=filtered_failure_count,
-        filtered_success_rate=filtered_success_rate,
-        filtered_unique_success_accounts=filtered_unique_success_accounts,
+        failure_rate=failure_rate,
         count_by_day=count_by_day,
         isp_count=isp_count,
         current_role=current_role,
@@ -1046,6 +1053,8 @@ def export_csv():
 
     exclude_failures = request.args.get('exclude_failures') == '1'
     exclude_duplicates = request.args.get('exclude_duplicates') == '1'
+    search_query = request.args.get('q', '').strip()
+    filtered_logs = filter_activation_logs_by_search(filtered_logs, search_query)
     filtered_logs = filter_activation_logs(
         filtered_logs,
         exclude_failures=exclude_failures,
