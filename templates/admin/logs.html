@@ -142,28 +142,40 @@
         .form-group {
             margin-bottom: 20px;
         }
-        .export-filters {
-            display: grid;
-            grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
-            gap: 16px;
-            align-items: end;
-            margin-bottom: 12px;
-        }
-        .export-filters input[type="datetime-local"] {
-            box-sizing: border-box;
-        }
-        .export-filters .btn {
-            width: auto;
-            min-height: 42px;
+        .log-filters {
+            display: flex;
+            flex-wrap: nowrap;
+            align-items: center;
+            gap: 12px;
+            overflow-x: auto;
             white-space: nowrap;
+            padding: 14px 0;
         }
-        @media (max-width: 700px) {
-            .export-filters {
-                grid-template-columns: 1fr;
-            }
-            .export-filters .btn {
-                width: 100%;
-            }
+        .log-filters label {
+            display: inline-flex;
+            align-items: center;
+            flex: 0 0 auto;
+            gap: 6px;
+            margin: 0;
+        }
+        .log-filters input[type="date"] {
+            box-sizing: border-box;
+            width: 145px;
+            min-height: 38px;
+            padding: 6px 8px;
+            border: 1px solid #ced4da;
+            border-radius: 6px;
+            background: white;
+            font: inherit;
+        }
+        .log-filters button {
+            flex: 0 0 auto;
+            border: 0;
+            border-radius: 6px;
+            padding: 9px 15px;
+            background: #667eea;
+            color: white;
+            cursor: pointer;
         }
         label {
             display: block;
@@ -277,24 +289,21 @@
         </div>
         
         <div class="form-container">
-            <!-- 导出卡片 -->
-            <div class="card">
-                <h3>📥 导出日志</h3>
-                <div class="export-filters">
-                  <div>
-                    <label for="startDate">开始时间</label>
-                    <input type="datetime-local" class="w-100" id="startDate">
-                  </div>
-                  <div>
-                    <label for="endDate">结束时间</label>
-                    <input type="datetime-local" class="w-100" id="endDate">
-                  </div>
-                  <div>
-                    <button type="button" class="btn btn-primary" onclick="exportLogs()">导出CSV</button>
-                  </div>
-                </div>
-                <div class="text-muted">如果不选择时间范围，将导出所有日志</div>
-            </div>
+            <form class="log-filters" id="logFilters" method="get" action="/logs">
+                <input type="hidden" name="page" value="1">
+                <label>开始日期 <input type="date" name="start" id="startDate" value="{{ start_date }}"></label>
+                <label>结束日期 <input type="date" name="end" id="endDate" value="{{ end_date }}"></label>
+                <label title="列表和 CSV 均只保留成功激活记录">
+                    <input type="checkbox" name="exclude_failures" id="excludeFailures" value="1" {% if exclude_failures %}checked{% endif %}>
+                    排除失败记录
+                </label>
+                <label title="自动排除失败记录，并按账号保留筛选范围内最早的一条成功记录">
+                    <input type="checkbox" name="exclude_duplicates" id="excludeDuplicates" value="1" {% if exclude_duplicates %}checked{% endif %}>
+                    排除重复记录
+                </label>
+                <button type="submit">应用筛选</button>
+                <button type="button" onclick="exportLogs()">导出 CSV</button>
+            </form>
             
             <!-- 日志表格 -->
             <div class="card">
@@ -344,27 +353,27 @@
             {% if logs.total > 0 %}
             <nav class="pagination" aria-label="日志分页">
                 {% if logs.has_prev %}
-                    <a class="page-link" href="?page={{ logs.prev_num }}">上一页</a>
+                    <a class="page-link" href="?page={{ logs.prev_num }}{% if start_date %}&start={{ start_date|urlencode }}{% endif %}{% if end_date %}&end={{ end_date|urlencode }}{% endif %}{% if exclude_failures %}&exclude_failures=1{% endif %}{% if exclude_duplicates %}&exclude_duplicates=1{% endif %}">上一页</a>
                 {% else %}
                     <span class="page-link disabled">上一页</span>
                 {% endif %}
 
                 {% if logs.show_first %}
-                    <a class="page-link" href="?page=1">1</a><span class="ellipsis">…</span>
+                    <a class="page-link" href="?page=1{% if start_date %}&start={{ start_date|urlencode }}{% endif %}{% if end_date %}&end={{ end_date|urlencode }}{% endif %}{% if exclude_failures %}&exclude_failures=1{% endif %}{% if exclude_duplicates %}&exclude_duplicates=1{% endif %}">1</a><span class="ellipsis">…</span>
                 {% endif %}
                 {% for p in logs.page_numbers %}
                     {% if p == logs.page %}
                         <span class="active">{{ p }}</span>
                     {% else %}
-                        <a class="page-link" href="?page={{ p }}">{{ p }}</a>
+                        <a class="page-link" href="?page={{ p }}{% if start_date %}&start={{ start_date|urlencode }}{% endif %}{% if end_date %}&end={{ end_date|urlencode }}{% endif %}{% if exclude_failures %}&exclude_failures=1{% endif %}{% if exclude_duplicates %}&exclude_duplicates=1{% endif %}">{{ p }}</a>
                     {% endif %}
                 {% endfor %}
                 {% if logs.show_last %}
-                    <span class="ellipsis">…</span><a class="page-link" href="?page={{ logs.pages }}">{{ logs.pages }}</a>
+                    <span class="ellipsis">…</span><a class="page-link" href="?page={{ logs.pages }}{% if start_date %}&start={{ start_date|urlencode }}{% endif %}{% if end_date %}&end={{ end_date|urlencode }}{% endif %}{% if exclude_failures %}&exclude_failures=1{% endif %}{% if exclude_duplicates %}&exclude_duplicates=1{% endif %}">{{ logs.pages }}</a>
                 {% endif %}
 
                 {% if logs.has_next %}
-                    <a class="page-link" href="?page={{ logs.next_num }}">下一页</a>
+                    <a class="page-link" href="?page={{ logs.next_num }}{% if start_date %}&start={{ start_date|urlencode }}{% endif %}{% if end_date %}&end={{ end_date|urlencode }}{% endif %}{% if exclude_failures %}&exclude_failures=1{% endif %}{% if exclude_duplicates %}&exclude_duplicates=1{% endif %}">下一页</a>
                 {% else %}
                     <span class="page-link disabled">下一页</span>
                 {% endif %}
@@ -380,6 +389,13 @@
         function exportLogs() {
             const startDate = document.getElementById('startDate').value;
             const endDate = document.getElementById('endDate').value;
+            const excludeFailures = document.getElementById('excludeFailures').checked;
+            const excludeDuplicates = document.getElementById('excludeDuplicates').checked;
+
+            if (Boolean(startDate) !== Boolean(endDate)) {
+                alert('请同时选择开始和结束日期，或将两项都留空。');
+                return;
+            }
             
             let url = '/export_csv';
             const params = new URLSearchParams();
@@ -390,6 +406,12 @@
             if (endDate) {
                 params.append('end', endDate);
             }
+            if (excludeFailures || excludeDuplicates) {
+                params.append('exclude_failures', '1');
+            }
+            if (excludeDuplicates) {
+                params.append('exclude_duplicates', '1');
+            }
             
             if (params.toString()) {
                 url += '?' + params.toString();
@@ -397,6 +419,24 @@
             
             window.location.href = url;
         }
+
+        document.getElementById('logFilters').addEventListener('submit', (event) => {
+            const startDate = document.getElementById('startDate').value;
+            const endDate = document.getElementById('endDate').value;
+            if (Boolean(startDate) !== Boolean(endDate)) {
+                event.preventDefault();
+                alert('请同时选择开始和结束日期，或将两项都留空。');
+            }
+        });
+
+        const excludeFailures = document.getElementById('excludeFailures');
+        const excludeDuplicates = document.getElementById('excludeDuplicates');
+        excludeDuplicates.addEventListener('change', () => {
+            if (excludeDuplicates.checked) excludeFailures.checked = true;
+        });
+        excludeFailures.addEventListener('change', () => {
+            if (!excludeFailures.checked) excludeDuplicates.checked = false;
+        });
     </script>
 </body>
 </html>

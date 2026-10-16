@@ -74,6 +74,87 @@ ISP_COLORS = {
     '直拨': '#00CED1'  # 青色
 }
 
+
+def filter_activation_logs(logs, exclude_failures=False, exclude_duplicates=False):
+    """Apply the shared successful-record and account de-duplication filters.
+
+    Duplicate accounts keep their earliest successful activation in the
+    already-scoped set of logs. Blank accounts are retained individually.
+    """
+    success_only = exclude_failures or exclude_duplicates
+    filtered_logs = [log for log in logs if not success_only or bool(log.success)]
+    if not exclude_duplicates:
+        return filtered_logs
+
+    def activation_order(log):
+        raw_timestamp = (log.timestamp or '').strip()
+        try:
+            parsed = datetime.fromisoformat(raw_timestamp.replace('Z', '+00:00'))
+            order = parsed.timestamp()
+            return (0, order, log.id or 0)
+        except (ValueError, OverflowError, OSError):
+            return (1, raw_timestamp, log.id or 0)
+
+    seen_accounts = set()
+    unique_logs = []
+    for log in sorted(filtered_logs, key=activation_order):
+        account = (log.username or '').strip()
+        if account and account in seen_accounts:
+            continue
+        if account:
+            seen_accounts.add(account)
+        unique_logs.append(log)
+    return unique_logs
+
+
+def parse_activation_log_date(log):
+    raw_timestamp = (log.timestamp or '').strip()
+    if not raw_timestamp:
+        return None
+    try:
+        return datetime.fromisoformat(raw_timestamp.replace('Z', '+00:00')).date()
+    except ValueError:
+        try:
+            return date.fromisoformat(raw_timestamp[:10])
+        except ValueError:
+            return None
+
+
+def parse_date_range(start_value, end_value):
+    try:
+        start_date = date.fromisoformat(start_value or '')
+    except ValueError:
+        start_date = None
+    try:
+        end_date = date.fromisoformat(end_value or '')
+    except ValueError:
+        end_date = None
+    if start_date and end_date and start_date > end_date:
+        start_date, end_date = end_date, start_date
+    return start_date, end_date
+
+
+def filter_activation_logs_by_date(logs, start_date=None, end_date=None):
+    filtered_logs = []
+    for log in logs:
+        log_date = parse_activation_log_date(log)
+        if log_date is None:
+            continue
+        if start_date and log_date < start_date:
+            continue
+        if end_date and log_date > end_date:
+            continue
+        filtered_logs.append(log)
+    return filtered_logs
+
+
+def count_unique_success_accounts(logs):
+    return len({
+        log.username.strip()
+        for log in logs
+        if log.success and isinstance(log.username, str) and log.username.strip()
+    })
+
 # =============================
 # 管理员登录/登出
 # =============================
@@ -128,12 +209,38 @@ def admin_logs():
     try:
         page = request.args.get('page', 1, type=int)
         per_page = 50
-        query = db.query(ActivationLog).order_by(ActivationLog.id.desc())
-        total = query.count()
+        start_date, end_date = parse_date_range(
+            request.args.get('start', ''),
+            request.args.get('end', ''),
+        )
+        exclude_failures = request.args.get('exclude_failures') == '1'
+        exclude_duplicates = request.args.get('exclude_duplicates') == '1'
+        query = db.query(ActivationLog)
+        if exclude_failures or exclude_duplicates:
+            query = query.filter(ActivationLog.success.is_(True))
+
+        all_logs = filter_activation_logs_by_date(
+            query.order_by(ActivationLog.id.desc()).all(),
+            start_date=start_date,
+            end_date=end_date,
+        )
+        if exclude_duplicates:
+            filtered_logs = filter_activation_logs(
+                all_logs,
+                exclude_duplicates=True,
+            )
+            filtered_logs.sort(key=lambda log: log.id or 0, reverse=True)
+            total = len(filtered_logs)
+        else:
+            total = len(all_logs)
+
         pages = max(1, (total + per_page - 1) // per_page)
         page = min(max(page, 1), pages)
         offset = (page - 1) * per_page
-        logs = query.offset(offset).limit(per_page).all()
+        if exclude_duplicates:
+            logs = filtered_logs[offset:offset + per_page]
+        else:
+            logs = all_logs[offset:offset + per_page]
 
         # 创建一个简单的Pagination对象
         class Pagination:
@@ -158,7 +265,17 @@ def admin_logs():
         # 获取当前用户角色
         current_role = session.get('admin_role')
         
-        return render_template('admin/logs.html', logs=pagination, ISP_DISPLAY=ISP_DISPLAY, ISP_COLORS=ISP_COLORS, current_role=current_role)
+        return render_template(
+            'admin/logs.html',
+            logs=pagination,
+            ISP_DISPLAY=ISP_DISPLAY,
+            ISP_COLORS=ISP_COLORS,
+            current_role=current_role,
+            exclude_failures=exclude_failures or exclude_duplicates,
+            exclude_duplicates=exclude_duplicates,
+            start_date=start_date.isoformat() if start_date else '',
+            end_date=end_date.isoformat() if end_date else '',
+        )
     finally:
         db.close()
 
@@ -628,50 +745,33 @@ def dashboard():
         except Exception as e:
             logger.error(f"自动同步失败: {e}")
 
-    # 日期范围和图表汇总粒度互相独立；失败过滤仅用于每日激活趋势图。
-    start_date = None
-    end_date = None
-    try:
-        start_date = date.fromisoformat(request.args.get('start', ''))
-    except ValueError:
-        start_date = None
-    try:
-        end_date = date.fromisoformat(request.args.get('end', ''))
-    except ValueError:
-        end_date = None
-    if start_date and end_date and start_date > end_date:
-        start_date, end_date = end_date, start_date
+    # 日期范围限定两行汇总卡片和图表；排除选项只作用于筛选后汇总。
+    start_date, end_date = parse_date_range(
+        request.args.get('start', ''),
+        request.args.get('end', ''),
+    )
 
     granularity = request.args.get('group', 'day')
     if granularity not in {'day', 'week', 'month'}:
         granularity = 'day'
     exclude_failures = request.args.get('exclude_failures') == '1'
+    exclude_duplicates = request.args.get('exclude_duplicates') == '1'
 
     # 获取统计数据
     db = SessionLocal()
     try:
         logs = db.query(ActivationLog).all()
-        filtered_logs = []
-        chart_logs = []
+        date_filtered_logs = filter_activation_logs_by_date(logs, start_date, end_date)
         count_by_day = {}
-        for log in logs:
-            if not log.timestamp:
+        summary_logs = filter_activation_logs(
+            date_filtered_logs,
+            exclude_failures=exclude_failures,
+            exclude_duplicates=exclude_duplicates,
+        )
+        for log in summary_logs:
+            log_date = parse_activation_log_date(log)
+            if log_date is None:
                 continue
-            try:
-                log_date = datetime.fromisoformat(log.timestamp.strip().replace('Z', '+00:00')).date()
-            except ValueError:
-                try:
-                    log_date = date.fromisoformat(log.timestamp.strip()[:10])
-                except ValueError:
-                    continue
-            if start_date and log_date < start_date:
-                continue
-            if end_date and log_date > end_date:
-                continue
-            filtered_logs.append(log)
-            if exclude_failures and not log.success:
-                continue
-            chart_logs.append(log)
             if granularity == 'week':
                 bucket = (log_date - timedelta(days=log_date.weekday())).isoformat()
             elif granularity == 'month':
@@ -683,20 +783,25 @@ def dashboard():
 
         # 按ISP统计
         isp_count = {}
-        for log in chart_logs:
+        for log in summary_logs:
             isp = log.isp or 'Unknown'
             if isp not in isp_count:
                 isp_count[isp] = 0
             isp_count[isp] += 1
 
-        # 统计成功和失败次数
-        success_count = 0
-        failure_count = 0
-        for log in filtered_logs:
-            if log.success:
-                success_count += 1
-            else:
-                failure_count += 1
+        date_total_count = len(date_filtered_logs)
+        date_success_count = sum(1 for log in date_filtered_logs if log.success)
+        date_failure_count = date_total_count - date_success_count
+        date_unique_success_accounts = count_unique_success_accounts(date_filtered_logs)
+
+        filtered_total_count = len(summary_logs)
+        filtered_success_count = sum(1 for log in summary_logs if log.success)
+        filtered_failure_count = filtered_total_count - filtered_success_count
+        filtered_success_rate = (
+            f'{filtered_success_count / filtered_total_count * 100:.1f}%'
+            if filtered_total_count else '0%'
+        )
+        filtered_unique_success_accounts = count_unique_success_accounts(summary_logs)
 
     finally:
         db.close()
@@ -704,7 +809,27 @@ def dashboard():
     # 获取当前用户角色
     current_role = session.get('admin_role')
     
-    return render_template('dashboard.html', start_date=start_date.isoformat() if start_date else '', end_date=end_date.isoformat() if end_date else '', granularity=granularity, exclude_failures=exclude_failures, total_count=len(filtered_logs), count_by_day=count_by_day, isp_count=isp_count, success_count=success_count, failure_count=failure_count, current_role=current_role)
+    return render_template(
+        'dashboard.html',
+        start_date=start_date.isoformat() if start_date else '',
+        end_date=end_date.isoformat() if end_date else '',
+        granularity=granularity,
+        exclude_failures=exclude_failures or exclude_duplicates,
+        exclude_duplicates=exclude_duplicates,
+        date_total_count=date_total_count,
+        date_success_count=date_success_count,
+        date_failure_count=date_failure_count,
+        date_success_rate=(f'{date_success_count / date_total_count * 100:.1f}%' if date_total_count else '0%'),
+        date_unique_success_accounts=date_unique_success_accounts,
+        filtered_total_count=filtered_total_count,
+        filtered_success_count=filtered_success_count,
+        filtered_failure_count=filtered_failure_count,
+        filtered_success_rate=filtered_success_rate,
+        filtered_unique_success_accounts=filtered_unique_success_accounts,
+        count_by_day=count_by_day,
+        isp_count=isp_count,
+        current_role=current_role,
+    )
 
 
 @app.route('/admin_list')
@@ -913,36 +1038,19 @@ def export_csv():
     finally:
         db.close()
 
-    start_str = request.args.get('start')
-    end_str = request.args.get('end')
-    LOG_TIME_FORMAT = '%Y-%m-%d %H:%M:%S'
-    PARAM_TIME_FORMAT = '%Y-%m-%dT%H:%M'
-    filtered_logs = []
+    start_date, end_date = parse_date_range(
+        request.args.get('start', ''),
+        request.args.get('end', ''),
+    )
+    filtered_logs = filter_activation_logs_by_date(logs, start_date, end_date)
 
-    for log in logs:
-        if not log.timestamp or not isinstance(log.timestamp, str):
-            continue
-        try:
-            log_time = datetime.strptime(log.timestamp.strip(), LOG_TIME_FORMAT)
-        except ValueError:
-            continue
-        skip_log = False
-        if start_str:
-            try:
-                start_time = datetime.strptime(start_str, PARAM_TIME_FORMAT)
-                if log_time < start_time:
-                    skip_log = True
-            except ValueError:
-                pass
-        if not skip_log and end_str:
-            try:
-                end_time = datetime.strptime(end_str, PARAM_TIME_FORMAT)
-                if log_time > end_time:
-                    skip_log = True
-            except ValueError:
-                pass
-        if not skip_log:
-            filtered_logs.append(log)
+    exclude_failures = request.args.get('exclude_failures') == '1'
+    exclude_duplicates = request.args.get('exclude_duplicates') == '1'
+    filtered_logs = filter_activation_logs(
+        filtered_logs,
+        exclude_failures=exclude_failures,
+        exclude_duplicates=exclude_duplicates,
+    )
 
     si = StringIO()
     si.write('\ufeff')
